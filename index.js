@@ -144,7 +144,7 @@ ${endereco}
 Como seu acesso aparece conectado no sistema, siga estes testes:
 
 1️⃣ Desligue o roteador da tomada.
-2️⃣ Aguarde 3 minutos.
+2️⃣ Aguarde 3 minutos, o roteador pode travar com quedas de energia ou altas temperaturas.
 3️⃣ Ligue novamente e teste a internet.
 4️⃣ Se possível, conecte na rede 5G do Wi-Fi.
 5️⃣ Faça o teste de velocidade pelo link:
@@ -152,7 +152,7 @@ https://www.speedtest.net/pt
 
 Caso a velocidade esteja de acordo com seu plano, pode ser uma instabilidade temporária em sites, aplicativos ou serviços externos.
 
-Se o problema persistir, um atendente entrará em contato no próximo dia útil.`;
+Se o problema persistir, um atendente entrará em contato no próximo dia útil, e para agilizar, descreva o ocorrido aqui para verificar.`;
 }
 
 function montarOS(sessao, numeroCliente) {
@@ -163,7 +163,7 @@ function montarOS(sessao, numeroCliente) {
 
   return {
     protocolo,
-    mensagem: `🚨 NOVA PRÉ-O.S - ATOS TELECOM
+    mensagem: `🚨 NOVA O.S - ATOS TELECOM
 
 📌 Protocolo: ${protocolo}
 
@@ -184,7 +184,7 @@ ${endereco}
 📝 Relato do cliente:
 "${sessao.relatoCliente || "não informado"}"
 
-⚠️ Atendimento encaminhado ao plantão técnico.`
+⚠️ Ao finalizar o atendimento, coloque o nome do cliente na lista de serviços do grupo com ✅.`
   };
 }
 
