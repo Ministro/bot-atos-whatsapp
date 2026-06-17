@@ -11,10 +11,7 @@ const PORT = process.env.PORT || 3000;
 const EVOLUTION_URL = process.env.EVOLUTION_URL;
 const EVOLUTION_API_KEY = process.env.EVOLUTION_API_KEY;
 const EVOLUTION_INSTANCE = process.env.EVOLUTION_INSTANCE || "atos-teste";
-
-const IXC_URL = (process.env.IXC_URL || "").replace(/\/$/, "");
-const IXC_USER = process.env.IXC_USER;
-const IXC_PASS = process.env.IXC_PASS;
+const STATUS_CPF_URL = process.env.STATUS_CPF_URL;
 
 const aguardandoCpf = new Map();
 
@@ -33,11 +30,6 @@ const palavrasProblema = [
   "lentidão",
   "lentidao"
 ];
-
-function ehFimDeSemana() {
-  const dia = new Date().getDay();
-  return dia === 0 || dia === 6;
-}
 
 function contemProblema(texto) {
   const msg = texto.toLowerCase();
@@ -81,69 +73,14 @@ async function enviarMensagem(numero, texto) {
   );
 }
 
-function authIXC() {
-  return Buffer.from(`${IXC_USER}:${IXC_PASS}`).toString("base64");
-}
-
-async function ixcPost(endpoint, body) {
-  const response = await axios.post(
-    `${IXC_URL}/webservice/v1/${endpoint}`,
-    body,
-    {
-      headers: {
-        Authorization: `Basic ${authIXC()}`,
-        "Content-Type": "application/json",
-        ixcsoft: "listar"
-      }
-    }
-  );
-
+async function consultarCpf(cpf) {
+  const response = await axios.get(`${STATUS_CPF_URL}?cpf=${cpf}`);
   return response.data;
 }
 
-async function buscarClientePorCpf(cpf) {
-  const params = new URLSearchParams({
-    qtype: "cnpj_cpf",
-    query: cpf,
-    oper: "=",
-    page: "1",
-    rp: "1",
-    sortname: "cliente.id",
-    sortorder: "desc"
-  });
-
-  const response = await axios.get(
-    `${IXC_URL}/webservice/v1/cliente?${params.toString()}`,
-    {
-      headers: {
-        Authorization: `Basic ${authIXC()}`,
-        "Content-Type": "application/json"
-      }
-    }
-  );
-
-  return response.data?.registros?.[0] || null;
-}
-
-async function buscarPppoePorCliente(idCliente) {
-  const dados = await ixcPost("radusuarios", {
-    qtype: "radusuarios.id_cliente",
-    query: idCliente,
-    oper: "=",
-    page: "1",
-    rp: "1",
-    sortname: "radusuarios.id",
-    sortorder: "desc"
-  });
-
-  return dados?.registros?.[0] || null;
-}
-
-async function consultarStatusPorCpf(cpf) {
-  const cliente = await buscarClientePorCpf(cpf);
-
-  if (!cliente) {
-    return `❌ Não consegui localizar esse CPF no IXC.
+function montarRespostaStatus(dados) {
+  if (dados.erro || dados.aviso) {
+    return `❌ Não consegui localizar esse CPF.
 
 Confira se digitou corretamente e envie novamente apenas o CPF do titular.
 
@@ -151,11 +88,17 @@ Exemplo:
 123.456.789-00`;
   }
 
-  const nome = cliente.razao || cliente.nome || "cliente";
-  const pppoe = await buscarPppoePorCliente(cliente.id);
+  const cliente = dados.cliente;
+  const pppoe = dados.pppoe;
+
+  if (!cliente) {
+    return `❌ Não consegui localizar esse CPF.
+
+Confira se digitou corretamente e envie novamente apenas o CPF do titular.`;
+  }
 
   if (!pppoe) {
-    return `⚠️ ${nome}, encontrei seu cadastro, mas não localizei o acesso PPPoE.
+    return `⚠️ ${cliente.nome || "Cliente"}, encontrei seu cadastro, mas não localizei o acesso PPPoE.
 
 Seu atendimento foi encaminhado ao plantão técnico.`;
   }
@@ -175,7 +118,7 @@ Seu atendimento foi encaminhado ao plantão técnico.`;
     "não informado";
 
   if (online) {
-    return `🟢 ${nome}, seu acesso está CONECTADO.
+    return `🟢 ${cliente.nome}, seu acesso está CONECTADO.
 
 ⏱️ Tempo conectado: ${tempo}
 🕒 Conectou em: ${conectouEm}
@@ -186,7 +129,7 @@ Caso ainda esteja sem internet, reinicie o roteador, aguarde 2 minutos e teste n
 Se continuar sem conexão, responda ATENDENTE.`;
   }
 
-  return `🔴 ${nome}, seu acesso está DESCONECTADO.
+  return `🔴 ${cliente.nome}, seu acesso está DESCONECTADO.
 
 🕒 Desconectou em: ${desconectouEm}
 
@@ -207,7 +150,6 @@ app.post("/webhook", async (req, res) => {
     if (key.fromMe) return res.sendStatus(200);
 
     const numero = key.remoteJid?.replace("@s.whatsapp.net", "");
-
     const texto =
       message.conversation ||
       message.extendedTextMessage?.text ||
@@ -217,14 +159,6 @@ app.post("/webhook", async (req, res) => {
     if (!numero || !texto) return res.sendStatus(200);
 
     console.log("Mensagem recebida:", numero, texto);
-
-    // TESTE: liberado todos os dias.
-    // Depois, para funcionar só sábado e domingo, descomente:
-    /*
-    if (!ehFimDeSemana()) {
-      return res.sendStatus(200);
-    }
-    */
 
     if (aguardandoCpf.has(numero)) {
       if (!pareceCpf(texto)) {
@@ -244,7 +178,8 @@ Exemplo:
 
       await enviarMensagem(numero, "🔎 Aguarde enquanto verifico sua conexão...");
 
-      const resposta = await consultarStatusPorCpf(cpf);
+      const dados = await consultarCpf(cpf);
+      const resposta = montarRespostaStatus(dados);
 
       await enviarMensagem(numero, resposta);
 
