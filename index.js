@@ -12,7 +12,7 @@ const EVOLUTION_URL = process.env.EVOLUTION_URL;
 const EVOLUTION_API_KEY = process.env.EVOLUTION_API_KEY;
 const EVOLUTION_INSTANCE = process.env.EVOLUTION_INSTANCE || "atos-teste";
 
-const IXC_URL = process.env.IXC_URL;
+const IXC_URL = (process.env.IXC_URL || "").replace(/\/$/, "");
 const IXC_USER = process.env.IXC_USER;
 const IXC_PASS = process.env.IXC_PASS;
 
@@ -33,11 +33,6 @@ const palavrasProblema = [
   "lentidão",
   "lentidao"
 ];
-
-function ehFimDeSemana() {
-  const dia = new Date().getDay();
-  return dia === 0 || dia === 6;
-}
 
 function contemProblema(texto) {
   const msg = texto.toLowerCase();
@@ -68,10 +63,7 @@ function formatarTempo(segundos) {
 async function enviarMensagem(numero, texto) {
   await axios.post(
     `${EVOLUTION_URL}/message/sendText/${EVOLUTION_INSTANCE}`,
-    {
-      number: numero,
-      text: texto
-    },
+    { number: numero, text: texto },
     {
       headers: {
         apikey: EVOLUTION_API_KEY,
@@ -100,17 +92,28 @@ async function ixcPost(endpoint, body) {
 }
 
 async function buscarClientePorCpf(cpf) {
-  const dados = await ixcPost("cliente", {
-    qtype: "cliente.cnpj_cpf",
-    query: cpf,
-    oper: "=",
-    page: "1",
-    rp: "1",
-    sortname: "cliente.id",
-    sortorder: "desc"
-  });
+  const tentativas = ["cliente", "clientes"];
 
-  return dados?.registros?.[0] || null;
+  for (const endpoint of tentativas) {
+    try {
+      const dados = await ixcPost(endpoint, {
+        qtype: `${endpoint}.cnpj_cpf`,
+        query: cpf,
+        oper: "=",
+        page: "1",
+        rp: "1",
+        sortname: `${endpoint}.id`,
+        sortorder: "desc"
+      });
+
+      const cliente = dados?.registros?.[0];
+      if (cliente) return cliente;
+    } catch (erro) {
+      console.log(`Endpoint ${endpoint} falhou:`, erro.response?.data || erro.message);
+    }
+  }
+
+  return null;
 }
 
 async function buscarPppoePorCliente(idCliente) {
@@ -131,14 +134,16 @@ async function consultarStatusPorCpf(cpf) {
   const cliente = await buscarClientePorCpf(cpf);
 
   if (!cliente) {
-    return `❌ Não encontrei cadastro com esse CPF.
+    return `❌ Não consegui localizar esse CPF no IXC.
 
-Confira se digitou corretamente e envie novamente apenas o CPF do titular.`;
+Confira se digitou corretamente e envie novamente apenas o CPF do titular.
+
+Exemplo:
+123.456.789-00`;
   }
 
-  const pppoe = await buscarPppoePorCliente(cliente.id);
-
   const nome = cliente.razao || cliente.nome || "cliente";
+  const pppoe = await buscarPppoePorCliente(cliente.id);
 
   if (!pppoe) {
     return `⚠️ ${nome}, encontrei seu cadastro, mas não localizei o acesso PPPoE.
@@ -150,16 +155,21 @@ Seu atendimento foi encaminhado ao plantão técnico.`;
   const tempo = formatarTempo(pppoe.tempoConectado);
   const ip = pppoe.ip || "não informado";
 
-  const ultimaConexao =
+  const conectouEm =
+    pppoe.ultima_conexao_inicial ||
     pppoe.ultimaConexao ||
-    pppoe.ultima_conexao ||
-    pppoe.ultima_desconexao ||
+    "não informado";
+
+  const desconectouEm =
+    pppoe.ultima_conexao_final ||
+    pppoe.ultima_atualizacao ||
     "não informado";
 
   if (online) {
     return `🟢 ${nome}, seu acesso está CONECTADO.
 
 ⏱️ Tempo conectado: ${tempo}
+🕒 Conectou em: ${conectouEm}
 🌐 IP: ${ip}
 
 Caso ainda esteja sem internet, reinicie o roteador, aguarde 2 minutos e teste novamente.
@@ -169,7 +179,7 @@ Se continuar sem conexão, responda ATENDENTE.`;
 
   return `🔴 ${nome}, seu acesso está DESCONECTADO.
 
-🕒 Última conexão: ${ultimaConexao}
+🕒 Desconectou em: ${desconectouEm}
 
 Seu atendimento foi encaminhado ao plantão técnico.`;
 }
@@ -188,7 +198,6 @@ app.post("/webhook", async (req, res) => {
     if (key.fromMe) return res.sendStatus(200);
 
     const numero = key.remoteJid?.replace("@s.whatsapp.net", "");
-
     const texto =
       message.conversation ||
       message.extendedTextMessage?.text ||
@@ -199,25 +208,14 @@ app.post("/webhook", async (req, res) => {
 
     console.log("Mensagem recebida:", numero, texto);
 
-    // TESTE: deixei liberado todos os dias.
-    // Depois, para funcionar só sábado e domingo, descomente abaixo:
-    /*
-    if (!ehFimDeSemana()) {
-      return res.sendStatus(200);
-    }
-    */
-
     if (aguardandoCpf.has(numero)) {
       if (!pareceCpf(texto)) {
-        await enviarMensagem(
-          numero,
-          `CPF inválido.
+        await enviarMensagem(numero, `CPF inválido.
 
 Envie somente o CPF do titular.
 
 Exemplo:
-123.456.789-00`
-        );
+123.456.789-00`);
         return res.sendStatus(200);
       }
 
@@ -236,15 +234,12 @@ Exemplo:
     if (contemProblema(texto)) {
       aguardandoCpf.set(numero, true);
 
-      await enviarMensagem(
-        numero,
-        `Olá! 👋 Aqui é o atendimento automático da ATOS TELECOM.
+      await enviarMensagem(numero, `Olá! 👋 Aqui é o atendimento automático da ATOS TELECOM.
 
 Para verificar sua conexão, envie somente o CPF do titular.
 
 Exemplo:
-123.456.789-00`
-      );
+123.456.789-00`);
 
       return res.sendStatus(200);
     }
