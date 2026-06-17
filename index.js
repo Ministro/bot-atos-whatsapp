@@ -34,6 +34,11 @@ const palavrasProblema = [
   "lentidao"
 ];
 
+function ehFimDeSemana() {
+  const dia = new Date().getDay();
+  return dia === 0 || dia === 6;
+}
+
 function contemProblema(texto) {
   const msg = texto.toLowerCase();
   return palavrasProblema.some(p => msg.includes(p));
@@ -63,7 +68,10 @@ function formatarTempo(segundos) {
 async function enviarMensagem(numero, texto) {
   await axios.post(
     `${EVOLUTION_URL}/message/sendText/${EVOLUTION_INSTANCE}`,
-    { number: numero, text: texto },
+    {
+      number: numero,
+      text: texto
+    },
     {
       headers: {
         apikey: EVOLUTION_API_KEY,
@@ -73,15 +81,17 @@ async function enviarMensagem(numero, texto) {
   );
 }
 
-async function ixcPost(endpoint, body) {
-  const auth = Buffer.from(`${IXC_USER}:${IXC_PASS}`).toString("base64");
+function authIXC() {
+  return Buffer.from(`${IXC_USER}:${IXC_PASS}`).toString("base64");
+}
 
+async function ixcPost(endpoint, body) {
   const response = await axios.post(
     `${IXC_URL}/webservice/v1/${endpoint}`,
     body,
     {
       headers: {
-        Authorization: `Basic ${auth}`,
+        Authorization: `Basic ${authIXC()}`,
         "Content-Type": "application/json",
         ixcsoft: "listar"
       }
@@ -92,28 +102,27 @@ async function ixcPost(endpoint, body) {
 }
 
 async function buscarClientePorCpf(cpf) {
-  const tentativas = ["cliente", "clientes"];
+  const params = new URLSearchParams({
+    qtype: "cnpj_cpf",
+    query: cpf,
+    oper: "=",
+    page: "1",
+    rp: "1",
+    sortname: "cliente.id",
+    sortorder: "desc"
+  });
 
-  for (const endpoint of tentativas) {
-    try {
-      const dados = await ixcPost(endpoint, {
-        qtype: `${endpoint}.cnpj_cpf`,
-        query: cpf,
-        oper: "=",
-        page: "1",
-        rp: "1",
-        sortname: `${endpoint}.id`,
-        sortorder: "desc"
-      });
-
-      const cliente = dados?.registros?.[0];
-      if (cliente) return cliente;
-    } catch (erro) {
-      console.log(`Endpoint ${endpoint} falhou:`, erro.response?.data || erro.message);
+  const response = await axios.get(
+    `${IXC_URL}/webservice/v1/cliente?${params.toString()}`,
+    {
+      headers: {
+        Authorization: `Basic ${authIXC()}`,
+        "Content-Type": "application/json"
+      }
     }
-  }
+  );
 
-  return null;
+  return response.data?.registros?.[0] || null;
 }
 
 async function buscarPppoePorCliente(idCliente) {
@@ -152,7 +161,7 @@ Seu atendimento foi encaminhado ao plantão técnico.`;
   }
 
   const online = pppoe.online === "S";
-  const tempo = formatarTempo(pppoe.tempoConectado);
+  const tempo = formatarTempo(pppoe.tempo_conectado || pppoe.tempoConectado);
   const ip = pppoe.ip || "não informado";
 
   const conectouEm =
@@ -198,6 +207,7 @@ app.post("/webhook", async (req, res) => {
     if (key.fromMe) return res.sendStatus(200);
 
     const numero = key.remoteJid?.replace("@s.whatsapp.net", "");
+
     const texto =
       message.conversation ||
       message.extendedTextMessage?.text ||
@@ -208,14 +218,25 @@ app.post("/webhook", async (req, res) => {
 
     console.log("Mensagem recebida:", numero, texto);
 
+    // TESTE: liberado todos os dias.
+    // Depois, para funcionar só sábado e domingo, descomente:
+    /*
+    if (!ehFimDeSemana()) {
+      return res.sendStatus(200);
+    }
+    */
+
     if (aguardandoCpf.has(numero)) {
       if (!pareceCpf(texto)) {
-        await enviarMensagem(numero, `CPF inválido.
+        await enviarMensagem(
+          numero,
+          `CPF inválido.
 
 Envie somente o CPF do titular.
 
 Exemplo:
-123.456.789-00`);
+123.456.789-00`
+        );
         return res.sendStatus(200);
       }
 
@@ -234,12 +255,15 @@ Exemplo:
     if (contemProblema(texto)) {
       aguardandoCpf.set(numero, true);
 
-      await enviarMensagem(numero, `Olá! 👋 Aqui é o atendimento automático da ATOS TELECOM.
+      await enviarMensagem(
+        numero,
+        `Olá! 👋 Aqui é o atendimento automático da ATOS TELECOM.
 
 Para verificar sua conexão, envie somente o CPF do titular.
 
 Exemplo:
-123.456.789-00`);
+123.456.789-00`
+      );
 
       return res.sendStatus(200);
     }
