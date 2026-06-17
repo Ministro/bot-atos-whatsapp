@@ -195,9 +195,19 @@ async function iniciarRelatoDesconectado(numero, cliente, pppoe) {
     pppoe
   });
 
-  await enviarMensagem(numero, `🔴 Seu acesso está DESCONECTADO.
+  const desconectouEm =
+  pppoe.ultima_conexao_final ||
+  pppoe.ultima_atualizacao ||
+  "não informado";
 
-Para agilizar o atendimento técnico, informe o que você percebe no equipamento.
+await enviarMensagem(numero, `🔴 Olá, ${cliente.nome}!
+
+Localizamos seu cadastro e verificamos que seu acesso está DESCONECTADO.
+
+🕒 Desconectou em:
+${desconectouEm}
+
+Para agilizar o atendimento técnico, descreva rapidamente o que você percebe no equipamento.
 
 Ex.: luz vermelha, roteador não liga ou Wi-Fi não aparece.`);
 }
