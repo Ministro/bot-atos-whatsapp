@@ -16,6 +16,26 @@ const TECNICO_NUMERO = process.env.TECNICO_NUMERO;
 
 const sessoes = new Map();
 
+const timersEncerramento = new Map();
+
+const palavrasDespedida = [
+  "obrigado",
+  "obrigada",
+  "obg",
+  "valeu",
+  "vlw",
+  "ok",
+  "tá bom",
+  "ta bom",
+  "beleza",
+  "blz",
+  "certo",
+  "perfeito",
+  "show",
+  "👍",
+  "🙏"
+];
+
 const palavrasFinanceiro = [
   "boleto",
   "segunda via",
@@ -287,6 +307,7 @@ Em instantes, ele entrará em contato e seguirá para o atendimento em sua resid
 Agradecemos pela compreensão e pedimos que aguarde.`);
 
   sessoes.delete(numero);
+  iniciarEncerramento(numero);
 }
 
 async function finalizarAtendimentoAudio(numero, sessao) {
@@ -389,6 +410,52 @@ Responda apenas com o número do acesso.`);
 
   await enviarMensagem(numero, montarRespostaConectado(cliente, pppoeConectado));
 }
+function contemDespedida(texto) {
+  const msg = String(texto || "").toLowerCase().trim();
+  return palavrasDespedida.some(p => msg.includes(p));
+}
+
+function cancelarEncerramento(numero) {
+  if (timersEncerramento.has(numero)) {
+    clearTimeout(timersEncerramento.get(numero));
+    timersEncerramento.delete(numero);
+  }
+}
+
+function iniciarEncerramento(numero) {
+  cancelarEncerramento(numero);
+
+  const timer = setTimeout(async () => {
+    try {
+      await enviarMensagem(numero, `😊 Agradecemos o seu contato.
+
+Caso precise de qualquer outra informação, estaremos à disposição.
+
+Tenha um excelente dia! 💙`);
+
+      sessoes.delete(numero);
+      timersEncerramento.delete(numero);
+    } catch (error) {
+      console.error("Erro ao encerrar conversa:", error.message);
+    }
+  }, 120000);
+
+  timersEncerramento.set(numero, timer);
+}
+
+async function responderDespedida(numero) {
+  cancelarEncerramento(numero);
+
+  await enviarMensagem(numero, `😊 Nós que agradecemos!
+
+A ATOS TELECOM agradece o seu contato.
+
+Sempre que precisar, estaremos à disposição.
+
+Tenha um excelente dia! 💙`);
+
+  sessoes.delete(numero);
+}
 app.get("/", (req, res) => {
   res.send("Bot Atos WhatsApp online ✅");
 });
@@ -416,6 +483,11 @@ app.post("/webhook", async (req, res) => {
     console.log("Mensagem recebida:", numero, texto || "[sem texto]", audio ? "[áudio]" : "");
 
     const sessao = sessoes.get(numero);
+
+    if (sessao && contemDespedida(texto)) {
+  await responderDespedida(numero);
+  return res.sendStatus(200);
+}
 
     if (sessao?.etapa === "aguardando_cpf") {
       if (audio) {
@@ -450,12 +522,14 @@ Agradecemos pela compreensão.`);
 
       if (contemFinanceiro(texto)) {
         await enviarMensagem(numero, mensagemFinanceiro());
+        iniciarEncerramento(numero);
         sessoes.delete(numero);
         return res.sendStatus(200);
       }
 
       if (contemLentidao(texto)) {
         await enviarMensagem(numero, mensagemOrientacaoConectado(sessao.cliente, sessao.pppoe));
+        iniciarEncerramento(numero);
         sessoes.delete(numero);
         return res.sendStatus(200);
       }
