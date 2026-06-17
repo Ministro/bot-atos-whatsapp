@@ -93,6 +93,27 @@ function formatarTempo(segundos) {
   return `${minutos} minuto(s)`;
 }
 
+function montarEndereco(cliente, pppoe) {
+  return [
+    cliente?.endereco || pppoe?.endereco,
+    cliente?.numero || pppoe?.numero,
+    cliente?.complemento || pppoe?.complemento,
+    cliente?.bairro || pppoe?.bairro
+  ]
+    .filter(Boolean)
+    .join(", ") || "não informado";
+}
+
+function listarAcesso(cliente, pppoe, index) {
+  const endereco = montarEndereco(cliente, pppoe);
+  const status = pppoe.online === "S" ? "🟢 CONECTADO" : "🔴 DESCONECTADO";
+
+  return `${index + 1}️⃣ ${status}
+📍 ${endereco}
+🔐 Login: ${pppoe.login || "não informado"}
+📄 Contrato: ${pppoe.id_contrato || "não informado"}`;
+}
+
 async function enviarMensagem(numero, texto) {
   await axios.post(
     `${EVOLUTION_URL}/message/sendText/${EVOLUTION_INSTANCE}`,
@@ -118,8 +139,12 @@ function montarRespostaConectado(cliente, pppoe) {
   const tempo = formatarTempo(pppoe.tempo_conectado || pppoe.tempoConectado);
   const ip = pppoe.ip || "não informado";
   const conectouEm = pppoe.ultima_conexao_inicial || "não informado";
+  const endereco = montarEndereco(cliente, pppoe);
 
   return `🟢 ${cliente.nome}, seu acesso está CONECTADO.
+
+📍 Endereço:
+${endereco}
 
 ⏱️ Tempo conectado: ${tempo}
 🕒 Conectou em: ${conectouEm}
@@ -143,16 +168,7 @@ function montarOS(sessao, numeroCliente) {
   const cliente = sessao.cliente || {};
   const pppoe = sessao.pppoe || {};
   const protocolo = gerarProtocolo();
-
-  const endereco =
-    [
-      cliente.endereco || pppoe.endereco,
-      cliente.numero || pppoe.numero,
-      cliente.complemento || pppoe.complemento,
-      cliente.bairro || pppoe.bairro
-    ]
-      .filter(Boolean)
-      .join(", ") || "não informado";
+  const endereco = montarEndereco(cliente, pppoe);
 
   return {
     protocolo,
@@ -182,6 +198,27 @@ ${endereco}
 
 ⚠️ Encaminhar para análise do plantão técnico.`
   };
+}
+
+async function iniciarTriagemDesconectado(numero, cliente, pppoe) {
+  sessoes.set(numero, {
+    etapa: "luz_vermelha",
+    cliente,
+    pppoe
+  });
+
+  await enviarMensagem(numero, `🔴 ${cliente.nome}, identificamos que seu acesso está DESCONECTADO.
+
+📍 Endereço:
+${montarEndereco(cliente, pppoe)}
+
+🔐 Login: ${pppoe.login || "não informado"}
+📄 Contrato: ${pppoe.id_contrato || "não informado"}
+🕒 Desconectou em: ${pppoe.ultima_conexao_final || pppoe.ultima_atualizacao || "não informado"}
+
+Vou fazer algumas perguntas rápidas para encaminhar ao plantão técnico.
+
+🔴 Há alguma luz vermelha no aparelho? Responda SIM ou NÃO.`);
 }
 
 app.get("/", (req, res) => {
@@ -235,35 +272,90 @@ Confira se digitou corretamente e envie novamente apenas o CPF do titular.`);
       }
 
       const cliente = dados.cliente;
-      const pppoe = dados.pppoe;
+      const pppoes = Array.isArray(dados.pppoes)
+        ? dados.pppoes
+        : dados.pppoe
+          ? [dados.pppoe]
+          : [];
 
-      if (!pppoe) {
-        await enviarMensagem(numero, `⚠️ ${cliente.nome}, encontrei seu cadastro, mas não localizei o acesso PPPoE.
+      if (!pppoes.length) {
+        await enviarMensagem(numero, `⚠️ ${cliente.nome}, encontrei seu cadastro, mas não localizei acesso PPPoE.
 
 Seu atendimento foi encaminhado ao plantão técnico.`);
         sessoes.delete(numero);
         return res.sendStatus(200);
       }
 
-      if (pppoe.online === "S") {
-        await enviarMensagem(numero, montarRespostaConectado(cliente, pppoe));
+      const ativos = pppoes.filter(p => p.ativo === "S");
+      const acessos = ativos.length ? ativos : pppoes;
+
+      const desconectados = acessos.filter(p => p.online !== "S");
+      const conectados = acessos.filter(p => p.online === "S");
+
+      if (desconectados.length === 1) {
+        await iniciarTriagemDesconectado(numero, cliente, desconectados[0]);
+        return res.sendStatus(200);
+      }
+
+      if (desconectados.length > 1) {
+        sessoes.set(numero, {
+          etapa: "selecionar_acesso_desconectado",
+          cliente,
+          opcoes: desconectados
+        });
+
+        const lista = desconectados.map((p, i) => listarAcesso(cliente, p, i)).join("\n\n");
+
+        await enviarMensagem(numero, `🔴 ${cliente.nome}, encontramos ${desconectados.length} acessos DESCONECTADOS no seu CPF.
+
+Escolha qual acesso está com problema:
+
+${lista}
+
+Responda apenas com o número do acesso.`);
+        return res.sendStatus(200);
+      }
+
+      if (conectados.length === 1) {
+        await enviarMensagem(numero, montarRespostaConectado(cliente, conectados[0]));
         sessoes.delete(numero);
         return res.sendStatus(200);
       }
 
-      sessoes.set(numero, {
-        etapa: "luz_vermelha",
-        cliente,
-        pppoe
-      });
+      const lista = conectados.map((p, i) => listarAcesso(cliente, p, i)).join("\n\n");
 
-      await enviarMensagem(numero, `🔴 ${cliente.nome}, seu acesso está DESCONECTADO.
+      await enviarMensagem(numero, `🟢 ${cliente.nome}, todos os acessos encontrados estão CONECTADOS.
 
-🕒 Desconectou em: ${pppoe.ultima_conexao_final || pppoe.ultima_atualizacao || "não informado"}
+${lista}
 
-Vou fazer algumas perguntas rápidas para encaminhar ao plantão técnico.
+Como os acessos aparecem conectados no sistema, siga estes testes:
 
-🔴 Há alguma luz vermelha no aparelho? Responda SIM ou NÃO.`);
+1️⃣ Desligue o roteador da tomada.
+2️⃣ Aguarde 3 minutos.
+3️⃣ Ligue novamente e teste a internet.
+4️⃣ Se possível, conecte na rede 5G do Wi-Fi.
+5️⃣ Faça o teste de velocidade:
+https://www.speedtest.net/pt
+
+Se o problema persistir, um atendente entrará em contato no próximo dia útil.`);
+
+      sessoes.delete(numero);
+      return res.sendStatus(200);
+    }
+
+    if (sessao?.etapa === "selecionar_acesso_desconectado") {
+      const escolha = Number(texto.trim());
+
+      if (!escolha || escolha < 1 || escolha > sessao.opcoes.length) {
+        await enviarMensagem(numero, `Opção inválida.
+
+Responda apenas com o número do acesso desconectado.`);
+        return res.sendStatus(200);
+      }
+
+      const pppoeEscolhido = sessao.opcoes[escolha - 1];
+
+      await iniciarTriagemDesconectado(numero, sessao.cliente, pppoeEscolhido);
       return res.sendStatus(200);
     }
 
