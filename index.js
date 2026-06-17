@@ -61,6 +61,16 @@ function pareceCpf(texto) {
   return limparCpf(texto).length === 11;
 }
 
+function respostaSim(texto) {
+  const msg = texto.toLowerCase().trim();
+  return ["sim", "s", "ss", "correto", "isso", "positivo"].includes(msg);
+}
+
+function respostaNao(texto) {
+  const msg = texto.toLowerCase().trim();
+  return ["não", "nao", "n", "negativo", "errado"].includes(msg);
+}
+
 function gerarProtocolo() {
   const agora = new Date();
   const ano = String(agora.getFullYear()).slice(2);
@@ -170,7 +180,10 @@ function montarOS(sessao, numeroCliente) {
   const cliente = sessao.cliente || {};
   const pppoe = sessao.pppoe || {};
   const protocolo = gerarProtocolo();
-  const endereco = montarEndereco(cliente, pppoe);
+
+  const endereco =
+    sessao.enderecoFinal ||
+    montarEndereco(cliente, pppoe);
 
   return {
     protocolo,
@@ -199,6 +212,26 @@ ${endereco}
   };
 }
 
+async function finalizarAtendimento(numero, sessao) {
+  const os = montarOS(sessao, numero);
+
+  if (TECNICO_NUMERO) {
+    await enviarMensagem(TECNICO_NUMERO, os.mensagem);
+  }
+
+  await enviarMensagem(numero, `✅ ATENDIMENTO ABERTO
+
+📌 Protocolo: ${os.protocolo}
+
+Recebemos sua solicitação e ela já foi encaminhada ao técnico de plantão.
+
+Em instantes, ele entrará em contato e seguirá para o atendimento em sua residência.
+
+Agradecemos pela compreensão e pedimos que aguarde.`);
+
+  sessoes.delete(numero);
+}
+
 async function iniciarRelatoDesconectado(numero, cliente, pppoe) {
   sessoes.set(numero, {
     etapa: "relato_cliente",
@@ -207,11 +240,11 @@ async function iniciarRelatoDesconectado(numero, cliente, pppoe) {
   });
 
   const desconectouEm =
-  pppoe.ultima_conexao_final ||
-  pppoe.ultima_atualizacao ||
-  "não informado";
+    pppoe.ultima_conexao_final ||
+    pppoe.ultima_atualizacao ||
+    "não informado";
 
-await enviarMensagem(numero, `🔴 Olá, ${cliente.nome}!
+  await enviarMensagem(numero, `🔴 Olá, ${cliente.nome}!
 
 Localizamos seu cadastro e verificamos que seu acesso está DESCONECTADO.
 
@@ -363,24 +396,51 @@ Responda apenas com o número do acesso desconectado.`);
 
     if (sessao?.etapa === "relato_cliente") {
       sessao.relatoCliente = texto.trim();
+      sessao.enderecoSistema = montarEndereco(sessao.cliente, sessao.pppoe);
+      sessao.etapa = "confirmar_endereco";
+      sessoes.set(numero, sessao);
 
-      const os = montarOS(sessao, numero);
+      await enviarMensagem(numero, `📍 O endereço abaixo está correto?
 
-      if (TECNICO_NUMERO) {
-        await enviarMensagem(TECNICO_NUMERO, os.mensagem);
+${sessao.enderecoSistema}
+
+Responda SIM ou NÃO.`);
+      return res.sendStatus(200);
+    }
+
+    if (sessao?.etapa === "confirmar_endereco") {
+      if (respostaSim(texto)) {
+        sessao.enderecoFinal = sessao.enderecoSistema;
+        await finalizarAtendimento(numero, sessao);
+        return res.sendStatus(200);
       }
 
-      await enviarMensagem(numero, `✅ ATENDIMENTO ABERTO
+      if (respostaNao(texto)) {
+        sessao.etapa = "aguardando_endereco_manual";
+        sessoes.set(numero, sessao);
 
-📌 Protocolo: ${os.protocolo}
+        await enviarMensagem(numero, `Por favor, envie o endereço correto com uma referência.
 
-Recebemos sua solicitação e ela já foi encaminhada ao técnico de plantão.
+Ex.: Rua X, nº 123, próximo ao mercado Y.`);
+        return res.sendStatus(200);
+      }
 
-Em instantes, ele entrará em contato e seguirá para o atendimento em sua residência.
+      await enviarMensagem(numero, `Não entendi.
 
-Agradecemos pela compreensão e pedimos que aguarde.`);
+O endereço abaixo está correto?
 
-      sessoes.delete(numero);
+${sessao.enderecoSistema}
+
+Responda apenas SIM ou NÃO.`);
+      return res.sendStatus(200);
+    }
+
+    if (sessao?.etapa === "aguardando_endereco_manual") {
+      sessao.enderecoFinal = `${texto.trim()}
+
+⚠️ Endereço informado pelo cliente após confirmação.`;
+
+      await finalizarAtendimento(numero, sessao);
       return res.sendStatus(200);
     }
 
