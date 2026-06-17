@@ -29,11 +29,27 @@ const palavrasProblema = [
   "oscilando",
   "lento",
   "lentidão",
-  "lentidao"
+  "lentidao",
+  "travando",
+  "internet lenta",
+  "wifi lento",
+  "wi-fi lento"
 ];
 
 function contemProblema(texto) {
   const msg = texto.toLowerCase();
+
+  const palavrasIgnoradas = [
+    "boleto",
+    "segunda via",
+    "fatura",
+    "pagamento",
+    "pagar",
+    "pix"
+  ];
+
+  if (palavrasIgnoradas.some(p => msg.includes(p))) return false;
+
   return palavrasProblema.some(p => msg.includes(p));
 }
 
@@ -109,9 +125,18 @@ function montarRespostaConectado(cliente, pppoe) {
 🕒 Conectou em: ${conectouEm}
 🌐 IP: ${ip}
 
-Caso ainda esteja sem internet, desligue o roteador da tomada, aguarde 2 minutos e ligue novamente.
+Como seu acesso aparece conectado no sistema, siga estes testes:
 
-Se continuar sem conexão, responda ATENDENTE.`;
+1️⃣ Desligue o roteador da tomada.
+2️⃣ Aguarde 3 minutos.
+3️⃣ Ligue novamente e teste a internet.
+4️⃣ Se possível, conecte na rede 5G do Wi-Fi.
+5️⃣ Faça o teste de velocidade pelo link:
+https://www.speedtest.net/pt
+
+Caso a velocidade esteja de acordo com seu plano, pode ser uma instabilidade temporária em sites, aplicativos ou serviços externos.
+
+Se o problema persistir, um atendente entrará em contato no próximo dia útil.`;
 }
 
 function montarOS(sessao, numeroCliente) {
@@ -265,7 +290,7 @@ Vou fazer algumas perguntas rápidas para encaminhar ao plantão técnico.
       sessao.etapa = "reiniciou";
       sessoes.set(numero, sessao);
 
-      await enviarMensagem(numero, "🔄 Você já reiniciou o equipamento, tirando da tomada por 2 minutos? Responda SIM ou NÃO.");
+      await enviarMensagem(numero, "🔄 Você já reiniciou o equipamento, tirando da tomada por 3 minutos? Responda SIM ou NÃO.");
       return res.sendStatus(200);
     }
 
@@ -278,11 +303,13 @@ Vou fazer algumas perguntas rápidas para encaminhar ao plantão técnico.
         await enviarMensagem(TECNICO_NUMERO, os.mensagem);
       }
 
-      await enviarMensagem(numero, `✅ Atendimento registrado com sucesso.
+      await enviarMensagem(numero, `✅ ATENDIMENTO ABERTO
 
 📌 Protocolo: ${os.protocolo}
 
-O plantão técnico já recebeu suas informações e fará a análise o mais breve possível.`);
+Identificamos que seu acesso está DESCONECTADO.
+
+O técnico plantonista já recebeu sua solicitação e irá entrar em contato o mais breve possível.`);
 
       sessoes.delete(numero);
       return res.sendStatus(200);
