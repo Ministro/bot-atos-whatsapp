@@ -84,9 +84,10 @@ app.post("/webhook", async (req, res) => {
 
     console.log("Mensagem recebida:", numero, texto);
 
-    if (!ehFimDeSemana()) {
-      return res.sendStatus(200);
-    }
+    // TESTE
+// if (!ehFimDeSemana()) {
+//   return res.sendStatus(200);
+// }
 
     if (contemProblema(texto)) {
       await enviarMensagem(
