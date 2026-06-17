@@ -12,8 +12,9 @@ const EVOLUTION_URL = process.env.EVOLUTION_URL;
 const EVOLUTION_API_KEY = process.env.EVOLUTION_API_KEY;
 const EVOLUTION_INSTANCE = process.env.EVOLUTION_INSTANCE || "atos-teste";
 const STATUS_CPF_URL = process.env.STATUS_CPF_URL;
+const TECNICO_NUMERO = process.env.TECNICO_NUMERO;
 
-const aguardandoCpf = new Map();
+const sessoes = new Map();
 
 const palavrasProblema = [
   "sem internet",
@@ -42,6 +43,25 @@ function limparCpf(texto) {
 
 function pareceCpf(texto) {
   return limparCpf(texto).length === 11;
+}
+
+function respostaSimNao(texto) {
+  const msg = texto.toLowerCase().trim();
+
+  if (["sim", "s", "ss", "positivo"].includes(msg)) return "SIM";
+  if (["não", "nao", "n", "negativo"].includes(msg)) return "NÃO";
+
+  return texto;
+}
+
+function gerarProtocolo() {
+  const agora = new Date();
+  const ano = String(agora.getFullYear()).slice(2);
+  const mes = String(agora.getMonth() + 1).padStart(2, "0");
+  const dia = String(agora.getDate()).padStart(2, "0");
+  const hora = String(agora.getHours()).padStart(2, "0");
+  const min = String(agora.getMinutes()).padStart(2, "0");
+  return `AT${ano}${mes}${dia}-${hora}${min}`;
 }
 
 function formatarTempo(segundos) {
@@ -78,62 +98,65 @@ async function consultarCpf(cpf) {
   return response.data;
 }
 
-function montarRespostaStatus(dados) {
-  if (dados.erro || dados.aviso) {
-    return `❌ Não consegui localizar esse CPF.
-
-Confira se digitou corretamente e envie novamente apenas o CPF do titular.
-
-Exemplo:
-123.456.789-00`;
-  }
-
-  const cliente = dados.cliente;
-  const pppoe = dados.pppoe;
-
-  if (!cliente) {
-    return `❌ Não consegui localizar esse CPF.
-
-Confira se digitou corretamente e envie novamente apenas o CPF do titular.`;
-  }
-
-  if (!pppoe) {
-    return `⚠️ ${cliente.nome || "Cliente"}, encontrei seu cadastro, mas não localizei o acesso PPPoE.
-
-Seu atendimento foi encaminhado ao plantão técnico.`;
-  }
-
-  const online = pppoe.online === "S";
+function montarRespostaConectado(cliente, pppoe) {
   const tempo = formatarTempo(pppoe.tempo_conectado || pppoe.tempoConectado);
   const ip = pppoe.ip || "não informado";
+  const conectouEm = pppoe.ultima_conexao_inicial || "não informado";
 
-  const conectouEm =
-    pppoe.ultima_conexao_inicial ||
-    pppoe.ultimaConexao ||
-    "não informado";
-
-  const desconectouEm =
-    pppoe.ultima_conexao_final ||
-    pppoe.ultima_atualizacao ||
-    "não informado";
-
-  if (online) {
-    return `🟢 ${cliente.nome}, seu acesso está CONECTADO.
+  return `🟢 ${cliente.nome}, seu acesso está CONECTADO.
 
 ⏱️ Tempo conectado: ${tempo}
 🕒 Conectou em: ${conectouEm}
 🌐 IP: ${ip}
 
-Caso ainda esteja sem internet, reinicie o roteador, aguarde 2 minutos e teste novamente.
+Caso ainda esteja sem internet, desligue o roteador da tomada, aguarde 2 minutos e ligue novamente.
 
 Se continuar sem conexão, responda ATENDENTE.`;
-  }
+}
 
-  return `🔴 ${cliente.nome}, seu acesso está DESCONECTADO.
+function montarOS(sessao, numeroCliente) {
+  const cliente = sessao.cliente || {};
+  const pppoe = sessao.pppoe || {};
+  const protocolo = gerarProtocolo();
 
-🕒 Desconectou em: ${desconectouEm}
+  const endereco =
+    [
+      cliente.endereco || pppoe.endereco,
+      cliente.numero || pppoe.numero,
+      cliente.complemento || pppoe.complemento,
+      cliente.bairro || pppoe.bairro
+    ]
+      .filter(Boolean)
+      .join(", ") || "não informado";
 
-Seu atendimento foi encaminhado ao plantão técnico.`;
+  return {
+    protocolo,
+    mensagem: `🚨 NOVA PRÉ-O.S - ATOS TELECOM
+
+📌 Protocolo: ${protocolo}
+
+👤 Cliente: ${cliente.nome || "não informado"}
+📞 WhatsApp: ${numeroCliente}
+🆔 ID Cliente: ${cliente.id || pppoe.id_cliente || "não informado"}
+🔐 Login PPPoE: ${pppoe.login || "não informado"}
+📄 Contrato: ${pppoe.id_contrato || "não informado"}
+
+📍 Endereço:
+${endereco}
+
+🔴 Status: DESCONECTADO
+🕒 Desconectou em: ${pppoe.ultima_conexao_final || pppoe.ultima_atualizacao || "não informado"}
+🌐 Último IP: ${pppoe.ip || "não informado"}
+📡 Concentrador: ${pppoe.concentrador || "não informado"}
+
+📋 Triagem do cliente:
+🔴 Luz vermelha no aparelho? ${sessao.luzVermelha || "não informado"}
+📶 Aparece o nome do Wi-Fi? ${sessao.nomeWifi || "não informado"}
+🔌 Equipamento está ligado? ${sessao.equipamentoLigado || "não informado"}
+🔄 Já reiniciou o equipamento? ${sessao.reiniciou || "não informado"}
+
+⚠️ Encaminhar para análise do plantão técnico.`
+  };
 }
 
 app.get("/", (req, res) => {
@@ -160,17 +183,16 @@ app.post("/webhook", async (req, res) => {
 
     console.log("Mensagem recebida:", numero, texto);
 
-    if (aguardandoCpf.has(numero)) {
+    const sessao = sessoes.get(numero);
+
+    if (sessao?.etapa === "aguardando_cpf") {
       if (!pareceCpf(texto)) {
-        await enviarMensagem(
-          numero,
-          `CPF inválido.
+        await enviarMensagem(numero, `CPF inválido.
 
 Envie somente o CPF do titular.
 
 Exemplo:
-123.456.789-00`
-        );
+123.456.789-00`);
         return res.sendStatus(200);
       }
 
@@ -179,27 +201,104 @@ Exemplo:
       await enviarMensagem(numero, "🔎 Aguarde enquanto verifico sua conexão...");
 
       const dados = await consultarCpf(cpf);
-      const resposta = montarRespostaStatus(dados);
 
-      await enviarMensagem(numero, resposta);
+      if (dados.erro || dados.aviso || !dados.cliente) {
+        await enviarMensagem(numero, `❌ Não consegui localizar esse CPF.
 
-      aguardandoCpf.delete(numero);
+Confira se digitou corretamente e envie novamente apenas o CPF do titular.`);
+        return res.sendStatus(200);
+      }
+
+      const cliente = dados.cliente;
+      const pppoe = dados.pppoe;
+
+      if (!pppoe) {
+        await enviarMensagem(numero, `⚠️ ${cliente.nome}, encontrei seu cadastro, mas não localizei o acesso PPPoE.
+
+Seu atendimento foi encaminhado ao plantão técnico.`);
+        sessoes.delete(numero);
+        return res.sendStatus(200);
+      }
+
+      if (pppoe.online === "S") {
+        await enviarMensagem(numero, montarRespostaConectado(cliente, pppoe));
+        sessoes.delete(numero);
+        return res.sendStatus(200);
+      }
+
+      sessoes.set(numero, {
+        etapa: "luz_vermelha",
+        cliente,
+        pppoe
+      });
+
+      await enviarMensagem(numero, `🔴 ${cliente.nome}, seu acesso está DESCONECTADO.
+
+🕒 Desconectou em: ${pppoe.ultima_conexao_final || pppoe.ultima_atualizacao || "não informado"}
+
+Vou fazer algumas perguntas rápidas para encaminhar ao plantão técnico.
+
+🔴 Há alguma luz vermelha no aparelho? Responda SIM ou NÃO.`);
+      return res.sendStatus(200);
+    }
+
+    if (sessao?.etapa === "luz_vermelha") {
+      sessao.luzVermelha = respostaSimNao(texto);
+      sessao.etapa = "nome_wifi";
+      sessoes.set(numero, sessao);
+
+      await enviarMensagem(numero, "📶 O nome do Wi-Fi aparece no celular? Responda SIM ou NÃO.");
+      return res.sendStatus(200);
+    }
+
+    if (sessao?.etapa === "nome_wifi") {
+      sessao.nomeWifi = respostaSimNao(texto);
+      sessao.etapa = "equipamento_ligado";
+      sessoes.set(numero, sessao);
+
+      await enviarMensagem(numero, "🔌 O equipamento/roteador está ligado na tomada? Responda SIM ou NÃO.");
+      return res.sendStatus(200);
+    }
+
+    if (sessao?.etapa === "equipamento_ligado") {
+      sessao.equipamentoLigado = respostaSimNao(texto);
+      sessao.etapa = "reiniciou";
+      sessoes.set(numero, sessao);
+
+      await enviarMensagem(numero, "🔄 Você já reiniciou o equipamento, tirando da tomada por 2 minutos? Responda SIM ou NÃO.");
+      return res.sendStatus(200);
+    }
+
+    if (sessao?.etapa === "reiniciou") {
+      sessao.reiniciou = respostaSimNao(texto);
+
+      const os = montarOS(sessao, numero);
+
+      if (TECNICO_NUMERO) {
+        await enviarMensagem(TECNICO_NUMERO, os.mensagem);
+      }
+
+      await enviarMensagem(numero, `✅ Atendimento registrado com sucesso.
+
+📌 Protocolo: ${os.protocolo}
+
+O plantão técnico já recebeu suas informações e fará a análise o mais breve possível.`);
+
+      sessoes.delete(numero);
       return res.sendStatus(200);
     }
 
     if (contemProblema(texto)) {
-      aguardandoCpf.set(numero, true);
+      sessoes.set(numero, {
+        etapa: "aguardando_cpf"
+      });
 
-      await enviarMensagem(
-        numero,
-        `Olá! 👋 Aqui é o atendimento automático da ATOS TELECOM.
+      await enviarMensagem(numero, `Olá! 👋 Aqui é o atendimento automático da ATOS TELECOM.
 
 Para verificar sua conexão, envie somente o CPF do titular.
 
 Exemplo:
-123.456.789-00`
-      );
-
+123.456.789-00`);
       return res.sendStatus(200);
     }
 
