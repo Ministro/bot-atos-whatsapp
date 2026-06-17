@@ -85,11 +85,22 @@ function formatarTempo(segundos) {
 }
 
 function montarEndereco(cliente, pppoe) {
+  const enderecoContrato = [
+    pppoe?.endereco,
+    pppoe?.numero,
+    pppoe?.complemento,
+    pppoe?.bairro
+  ]
+    .filter(Boolean)
+    .join(", ");
+
+  if (enderecoContrato) return enderecoContrato;
+
   return [
-    cliente?.endereco || pppoe?.endereco,
-    cliente?.numero || pppoe?.numero,
-    cliente?.complemento || pppoe?.complemento,
-    cliente?.bairro || pppoe?.bairro
+    cliente?.endereco,
+    cliente?.numero,
+    cliente?.complemento,
+    cliente?.bairro
   ]
     .filter(Boolean)
     .join(", ") || "não informado";
