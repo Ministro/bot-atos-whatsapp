@@ -15,52 +15,23 @@ const STATUS_CPF_URL = process.env.STATUS_CPF_URL;
 const TECNICO_NUMERO = process.env.TECNICO_NUMERO;
 
 const sessoes = new Map();
-
 const timersEncerramento = new Map();
 
 const palavrasDespedida = [
-  "obrigado",
-  "obrigada",
-  "obg",
-  "valeu",
-  "vlw",
-  "ok",
-  "tá bom",
-  "ta bom",
-  "beleza",
-  "blz",
-  "certo",
-  "perfeito",
-  "show",
-  "👍",
-  "🙏"
+  "obrigado", "obrigada", "obg", "valeu", "vlw", "ok",
+  "tá bom", "ta bom", "beleza", "blz", "certo",
+  "perfeito", "show", "👍", "🙏"
 ];
 
 const palavrasFinanceiro = [
-  "boleto",
-  "segunda via",
-  "2 via",
-  "fatura",
-  "pagamento",
-  "pagar",
-  "pix",
-  "vencimento",
-  "financeiro",
-  "codigo de barras",
-  "código de barras"
+  "boleto", "segunda via", "2 via", "fatura", "pagamento",
+  "pagar", "pix", "vencimento", "financeiro",
+  "codigo de barras", "código de barras"
 ];
 
 const palavrasLentidao = [
-  "lento",
-  "lentidão",
-  "lentidao",
-  "oscilando",
-  "travando",
-  "internet lenta",
-  "wifi lento",
-  "wi-fi lento",
-  "ping",
-  "velocidade"
+  "lento", "lentidão", "lentidao", "oscilando", "travando",
+  "internet lenta", "wifi lento", "wi-fi lento", "ping", "velocidade"
 ];
 
 function limparCpf(texto) {
@@ -91,6 +62,11 @@ function contemLentidao(texto) {
   return palavrasLentidao.some(p => msg.includes(p));
 }
 
+function contemDespedida(texto) {
+  const msg = String(texto || "").toLowerCase().trim();
+  return palavrasDespedida.some(p => msg.includes(p));
+}
+
 function ehAudio(message, data) {
   return Boolean(
     message?.audioMessage ||
@@ -98,6 +74,48 @@ function ehAudio(message, data) {
     data?.messageType === "audioMessage" ||
     data?.messageType === "audio"
   );
+}
+
+function cancelarEncerramento(numero) {
+  if (timersEncerramento.has(numero)) {
+    clearTimeout(timersEncerramento.get(numero));
+    timersEncerramento.delete(numero);
+  }
+}
+
+function iniciarEncerramento(numero) {
+  cancelarEncerramento(numero);
+
+  const timer = setTimeout(async () => {
+    try {
+      await enviarMensagem(numero, `😊 Agradecemos o seu contato.
+
+Caso precise de qualquer outra informação, estaremos à disposição.
+
+Tenha um excelente dia! 💙`);
+
+      sessoes.delete(numero);
+      timersEncerramento.delete(numero);
+    } catch (error) {
+      console.error("Erro ao encerrar conversa:", error.message);
+    }
+  }, 120000);
+
+  timersEncerramento.set(numero, timer);
+}
+
+async function responderDespedida(numero) {
+  cancelarEncerramento(numero);
+
+  await enviarMensagem(numero, `😊 Nós que agradecemos!
+
+A ATOS TELECOM agradece o seu contato.
+
+Sempre que precisar, estaremos à disposição.
+
+Tenha um excelente dia! 💙`);
+
+  sessoes.delete(numero);
 }
 
 function gerarProtocolo() {
@@ -129,9 +147,7 @@ function montarEndereco(cliente, pppoe) {
     pppoe?.numero,
     pppoe?.complemento,
     pppoe?.bairro
-  ]
-    .filter(Boolean)
-    .join(", ");
+  ].filter(Boolean).join(", ");
 
   if (enderecoContrato) return enderecoContrato;
 
@@ -140,9 +156,7 @@ function montarEndereco(cliente, pppoe) {
     cliente?.numero,
     cliente?.complemento,
     cliente?.bairro
-  ]
-    .filter(Boolean)
-    .join(", ") || "não informado";
+  ].filter(Boolean).join(", ") || "não informado";
 }
 
 function listarAcesso(cliente, pppoe, index) {
@@ -158,10 +172,7 @@ function listarAcesso(cliente, pppoe, index) {
 async function enviarMensagem(numero, texto) {
   await axios.post(
     `${EVOLUTION_URL}/message/sendText/${EVOLUTION_INSTANCE}`,
-    {
-      number: numero,
-      text: texto
-    },
+    { number: numero, text: texto },
     {
       headers: {
         apikey: EVOLUTION_API_KEY,
@@ -306,7 +317,7 @@ Em instantes, ele entrará em contato e seguirá para o atendimento em sua resid
 
 Agradecemos pela compreensão e pedimos que aguarde.`);
 
-  sessoes.delete(numero);
+  sessoes.set(numero, { etapa: "encerramento" });
   iniciarEncerramento(numero);
 }
 
@@ -366,7 +377,9 @@ Confira se digitou corretamente e envie novamente apenas o CPF do titular.`);
     await enviarMensagem(numero, `⚠️ ${cliente.nome}, encontrei seu cadastro, mas não localizei acesso PPPoE.
 
 Um atendente entrará em contato assim que possível.`);
-    sessoes.delete(numero);
+
+    sessoes.set(numero, { etapa: "encerramento" });
+    iniciarEncerramento(numero);
     return;
   }
 
@@ -388,7 +401,9 @@ Um atendente entrará em contato assim que possível.`);
       opcoes: desconectados
     });
 
-    const lista = desconectados.map((p, i) => listarAcesso(cliente, p, i)).join("\n\n");
+    const lista = desconectados
+      .map((p, i) => listarAcesso(cliente, p, i))
+      .join("\n\n");
 
     await enviarMensagem(numero, `🔴 ${cliente.nome}, encontramos ${desconectados.length} acessos DESCONECTADOS no seu CPF.
 
@@ -410,52 +425,6 @@ Responda apenas com o número do acesso.`);
 
   await enviarMensagem(numero, montarRespostaConectado(cliente, pppoeConectado));
 }
-function contemDespedida(texto) {
-  const msg = String(texto || "").toLowerCase().trim();
-  return palavrasDespedida.some(p => msg.includes(p));
-}
-
-function cancelarEncerramento(numero) {
-  if (timersEncerramento.has(numero)) {
-    clearTimeout(timersEncerramento.get(numero));
-    timersEncerramento.delete(numero);
-  }
-}
-
-function iniciarEncerramento(numero) {
-  cancelarEncerramento(numero);
-
-  const timer = setTimeout(async () => {
-    try {
-      await enviarMensagem(numero, `😊 Agradecemos o seu contato.
-
-Caso precise de qualquer outra informação, estaremos à disposição.
-
-Tenha um excelente dia! 💙`);
-
-      sessoes.delete(numero);
-      timersEncerramento.delete(numero);
-    } catch (error) {
-      console.error("Erro ao encerrar conversa:", error.message);
-    }
-  }, 120000);
-
-  timersEncerramento.set(numero, timer);
-}
-
-async function responderDespedida(numero) {
-  cancelarEncerramento(numero);
-
-  await enviarMensagem(numero, `😊 Nós que agradecemos!
-
-A ATOS TELECOM agradece o seu contato.
-
-Sempre que precisar, estaremos à disposição.
-
-Tenha um excelente dia! 💙`);
-
-  sessoes.delete(numero);
-}
 app.get("/", (req, res) => {
   res.send("Bot Atos WhatsApp online ✅");
 });
@@ -470,6 +439,7 @@ app.post("/webhook", async (req, res) => {
     if (key.fromMe) return res.sendStatus(200);
 
     const numero = key.remoteJid?.replace("@s.whatsapp.net", "");
+
     const texto =
       message.conversation ||
       message.extendedTextMessage?.text ||
@@ -485,9 +455,20 @@ app.post("/webhook", async (req, res) => {
     const sessao = sessoes.get(numero);
 
     if (sessao && contemDespedida(texto)) {
-  await responderDespedida(numero);
-  return res.sendStatus(200);
-}
+      await responderDespedida(numero);
+      return res.sendStatus(200);
+    }
+
+    if (sessao?.etapa === "encerramento") {
+      cancelarEncerramento(numero);
+
+      await enviarMensagem(numero, `Entendido.
+
+Caso precise de qualquer outra informação, estaremos à disposição. 💙`);
+
+      sessoes.delete(numero);
+      return res.sendStatus(200);
+    }
 
     if (sessao?.etapa === "aguardando_cpf") {
       if (audio) {
@@ -516,28 +497,37 @@ Exemplo:
 Em breve, um atendente entrará em contato para ajudá-lo.
 
 Agradecemos pela compreensão.`);
-        sessoes.delete(numero);
+
+        sessoes.set(numero, { etapa: "encerramento" });
+        iniciarEncerramento(numero);
         return res.sendStatus(200);
       }
 
       if (contemFinanceiro(texto)) {
         await enviarMensagem(numero, mensagemFinanceiro());
+
+        sessoes.set(numero, { etapa: "encerramento" });
         iniciarEncerramento(numero);
-        sessoes.delete(numero);
         return res.sendStatus(200);
       }
 
       if (contemLentidao(texto)) {
-        await enviarMensagem(numero, mensagemOrientacaoConectado(sessao.cliente, sessao.pppoe));
+        await enviarMensagem(
+          numero,
+          mensagemOrientacaoConectado(sessao.cliente, sessao.pppoe)
+        );
+
+        sessoes.set(numero, { etapa: "encerramento" });
         iniciarEncerramento(numero);
-        sessoes.delete(numero);
         return res.sendStatus(200);
       }
 
       await enviarMensagem(numero, `Entendido.
 
 Um atendente entrará em contato assim que possível ou no próximo dia útil para dar continuidade ao atendimento.`);
-      sessoes.delete(numero);
+
+      sessoes.set(numero, { etapa: "encerramento" });
+      iniciarEncerramento(numero);
       return res.sendStatus(200);
     }
 
