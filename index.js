@@ -61,15 +61,6 @@ function pareceCpf(texto) {
   return limparCpf(texto).length === 11;
 }
 
-function respostaSimNao(texto) {
-  const msg = texto.toLowerCase().trim();
-
-  if (["sim", "s", "ss", "positivo"].includes(msg)) return "SIM";
-  if (["não", "nao", "n", "negativo"].includes(msg)) return "NÃO";
-
-  return texto;
-}
-
 function gerarProtocolo() {
   const agora = new Date();
   const ano = String(agora.getFullYear()).slice(2);
@@ -190,35 +181,25 @@ ${endereco}
 🌐 Último IP: ${pppoe.ip || "não informado"}
 📡 Concentrador: ${pppoe.concentrador || "não informado"}
 
-📋 Triagem do cliente:
-🔴 Luz vermelha no aparelho? ${sessao.luzVermelha || "não informado"}
-📶 Aparece o nome do Wi-Fi? ${sessao.nomeWifi || "não informado"}
-🔌 Equipamento está ligado? ${sessao.equipamentoLigado || "não informado"}
-🔄 Já reiniciou o equipamento? ${sessao.reiniciou || "não informado"}
+📝 Relato do cliente:
+"${sessao.relatoCliente || "não informado"}"
 
-⚠️ Encaminhar para análise do plantão técnico.`
+⚠️ Atendimento encaminhado ao plantão técnico.`
   };
 }
 
-async function iniciarTriagemDesconectado(numero, cliente, pppoe) {
+async function iniciarRelatoDesconectado(numero, cliente, pppoe) {
   sessoes.set(numero, {
-    etapa: "luz_vermelha",
+    etapa: "relato_cliente",
     cliente,
     pppoe
   });
 
-  await enviarMensagem(numero, `🔴 ${cliente.nome}, identificamos que seu acesso está DESCONECTADO.
+  await enviarMensagem(numero, `🔴 Seu acesso está DESCONECTADO.
 
-📍 Endereço:
-${montarEndereco(cliente, pppoe)}
+Para agilizar o atendimento técnico, informe o que você percebe no equipamento.
 
-🔐 Login: ${pppoe.login || "não informado"}
-📄 Contrato: ${pppoe.id_contrato || "não informado"}
-🕒 Desconectou em: ${pppoe.ultima_conexao_final || pppoe.ultima_atualizacao || "não informado"}
-
-Vou fazer algumas perguntas rápidas para encaminhar ao plantão técnico.
-
-🔴 Há alguma luz vermelha no aparelho? Responda SIM ou NÃO.`);
+Ex.: luz vermelha, roteador não liga ou Wi-Fi não aparece.`);
 }
 
 app.get("/", (req, res) => {
@@ -293,7 +274,7 @@ Seu atendimento foi encaminhado ao plantão técnico.`);
       const conectados = acessos.filter(p => p.online === "S");
 
       if (desconectados.length === 1) {
-        await iniciarTriagemDesconectado(numero, cliente, desconectados[0]);
+        await iniciarRelatoDesconectado(numero, cliente, desconectados[0]);
         return res.sendStatus(200);
       }
 
@@ -355,39 +336,12 @@ Responda apenas com o número do acesso desconectado.`);
 
       const pppoeEscolhido = sessao.opcoes[escolha - 1];
 
-      await iniciarTriagemDesconectado(numero, sessao.cliente, pppoeEscolhido);
+      await iniciarRelatoDesconectado(numero, sessao.cliente, pppoeEscolhido);
       return res.sendStatus(200);
     }
 
-    if (sessao?.etapa === "luz_vermelha") {
-      sessao.luzVermelha = respostaSimNao(texto);
-      sessao.etapa = "nome_wifi";
-      sessoes.set(numero, sessao);
-
-      await enviarMensagem(numero, "📶 O nome do Wi-Fi aparece no celular? Responda SIM ou NÃO.");
-      return res.sendStatus(200);
-    }
-
-    if (sessao?.etapa === "nome_wifi") {
-      sessao.nomeWifi = respostaSimNao(texto);
-      sessao.etapa = "equipamento_ligado";
-      sessoes.set(numero, sessao);
-
-      await enviarMensagem(numero, "🔌 O equipamento/roteador está ligado na tomada? Responda SIM ou NÃO.");
-      return res.sendStatus(200);
-    }
-
-    if (sessao?.etapa === "equipamento_ligado") {
-      sessao.equipamentoLigado = respostaSimNao(texto);
-      sessao.etapa = "reiniciou";
-      sessoes.set(numero, sessao);
-
-      await enviarMensagem(numero, "🔄 Você já reiniciou o equipamento, tirando da tomada por 3 minutos? Responda SIM ou NÃO.");
-      return res.sendStatus(200);
-    }
-
-    if (sessao?.etapa === "reiniciou") {
-      sessao.reiniciou = respostaSimNao(texto);
+    if (sessao?.etapa === "relato_cliente") {
+      sessao.relatoCliente = texto.trim();
 
       const os = montarOS(sessao, numero);
 
@@ -399,9 +353,11 @@ Responda apenas com o número do acesso desconectado.`);
 
 📌 Protocolo: ${os.protocolo}
 
-Identificamos que seu acesso está DESCONECTADO.
+Recebemos sua solicitação e ela já foi encaminhada ao técnico de plantão.
 
-O técnico plantonista já recebeu sua solicitação e irá entrar em contato o mais breve possível.`);
+Em instantes, ele entrará em contato e seguirá para o atendimento em sua residência.
+
+Agradecemos pela compreensão e pedimos que aguarde.`);
 
       sessoes.delete(numero);
       return res.sendStatus(200);
