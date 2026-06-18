@@ -448,6 +448,54 @@ Responda apenas com o número do acesso.`);
   await enviarMensagem(numero, montarRespostaConectado(cliente, pppoeConectado));
 }
 
+async function finalizarAtendimentoOPA(atendimento, dadosCpf) {
+  const cliente = dadosCpf.cliente || {};
+
+  const pppoes = Array.isArray(dadosCpf.pppoes)
+    ? dadosCpf.pppoes
+    : dadosCpf.pppoe
+      ? [dadosCpf.pppoe]
+      : [];
+
+  const pppoe = pppoes.find(p => p.online !== "S") || pppoes[0] || {};
+
+  const numeroCliente = String(atendimento.canal_cliente || "")
+    .replace("@c.us", "")
+    .replace(/\D/g, "");
+
+  const protocolo = atendimento.protocolo || gerarProtocolo();
+  const endereco = montarEndereco(cliente, pppoe);
+
+  const mensagemTecnico = `🚨 NOVA O.S - PLANTÃO OPA
+
+📌 Protocolo OPA: ${protocolo}
+
+👤 Cliente: ${cliente.nome || atendimento.id_cliente?.nome || "não informado"}
+📞 WhatsApp: ${numeroCliente || "não informado"}
+🆔 ID Cliente: ${cliente.id || atendimento.id_cliente?._id || "não informado"}
+🔐 Login PPPoE: ${pppoe.login || "não informado"}
+📄 Contrato: ${pppoe.id_contrato || "não informado"}
+
+📍 Endereço:
+${endereco}
+
+🔴 Status: DESCONECTADO
+🕒 Desconectou em: ${pppoe.ultima_conexao_final || pppoe.ultima_atualizacao || "não informado"}
+🌐 Último IP: ${pppoe.ip || "não informado"}
+📡 Concentrador: ${pppoe.concentrador || "não informado"}
+
+📝 Origem:
+Atendimento vindo do OPA Suite após cliente informar que reiniciou os equipamentos e não resolveu.
+
+⚠️ Ao finalizar o atendimento, coloque o nome do cliente na lista de serviços do grupo com ✅.`;
+
+  if (TECNICO_NUMERO) {
+    await enviarMensagem(TECNICO_NUMERO, mensagemTecnico);
+  }
+
+  console.log("✅ O.S do OPA enviada ao técnico");
+}
+
 app.get("/opa/webhook", (req, res) => {
   res.status(200).json({
     status: "ok",
@@ -456,39 +504,68 @@ app.get("/opa/webhook", (req, res) => {
 });
 
 app.post("/opa/webhook", async (req, res) => {
-  res.status(200).json({
-    success: true
-  });
+  res.status(200).json({ success: true });
 
   try {
-    console.log("Webhook OPA recebido:");
-    console.log(JSON.stringify(req.body, null, 2));
-
     const evento = req.body?.event;
 
-    if (evento?.type !== "customerServiceEvent") {
-      console.log("Evento ignorado: não é customerServiceEvent");
-      return;
-    }
+    if (!evento || evento.type !== "customerServiceEvent") return;
 
     const action = evento.data?.action;
     const payload = evento.data?.payload;
-    const atendimentoId = payload?._id;
 
-    if (!atendimentoId) {
-      console.log("Evento OPA sem ID de atendimento");
+    const TAG_SEM_CONEXAO = "62878ee28d8911cd3916e8d4";
+
+    const tags = Array.isArray(payload?.tags)
+      ? payload.tags.filter(Boolean)
+      : [];
+
+    console.log("====================================");
+    console.log("Webhook OPA recebido");
+    console.log("Ação:", action);
+    console.log("Tags:", tags);
+
+    if (action !== "transferToDepartment") {
+      console.log("Ignorado: não é transferência.");
       return;
     }
 
-    console.log("Ação OPA:", action);
-    console.log("ID atendimento OPA:", atendimentoId);
+    if (!tags.includes(TAG_SEM_CONEXAO)) {
+      console.log("Ignorado: não é Sem conexão.");
+      return;
+    }
 
-    const atendimento = await buscarAtendimentoOPA(atendimentoId);
+    if (!payload?._id) {
+      console.log("Evento sem ID de atendimento.");
+      return;
+    }
 
-    console.log("Atendimento completo buscado na API do OPA:");
-    console.log(JSON.stringify(atendimento, null, 2));
+    const atendimento = await buscarAtendimentoOPA(payload._id);
+
+    const cpf = atendimento.id_cliente?.cpf_cnpj;
+
+    if (!cpf) {
+      console.log("Atendimento sem CPF.");
+      return;
+    }
+
+    console.log("✅ Sem conexão confirmado no OPA");
+    console.log("Cliente:", atendimento.id_cliente?.nome);
+    console.log("CPF:", cpf);
+    console.log("Protocolo:", atendimento.protocolo);
+
+    const dadosCpf = await consultarCpf(cpf);
+
+    if (dadosCpf.erro || dadosCpf.aviso || !dadosCpf.cliente) {
+      console.log("Não localizou dados pelo CPF:");
+      console.log(JSON.stringify(dadosCpf, null, 2));
+      return;
+    }
+
+    await finalizarAtendimentoOPA(atendimento, dadosCpf);
   } catch (error) {
-    console.error("Erro ao processar webhook OPA:", error.response?.data || error.message);
+    console.error("Erro no webhook OPA:");
+    console.error(error.response?.data || error.message);
   }
 });
 
