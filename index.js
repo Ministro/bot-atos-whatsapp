@@ -425,6 +425,22 @@ Responda apenas com o número do acesso.`);
 
   await enviarMensagem(numero, montarRespostaConectado(cliente, pppoeConectado));
 }
+
+app.get("/opa/webhook", (req, res) => {
+    res.status(200).json({
+        status: "ok",
+        message: "Webhook OPA funcionando"
+    });
+});
+
+app.post("/opa/webhook", (req, res) => {
+    console.log("Webhook OPA recebido:");
+    console.log(req.body);
+
+    res.status(200).json({
+        success: true
+    });
+});
 app.get("/", (req, res) => {
   res.send("Bot Atos WhatsApp online ✅");
 });
