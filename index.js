@@ -208,6 +208,35 @@ async function buscarAtendimentoOPA(atendimentoId) {
   return response.data?.data || response.data;
 }
 
+function estaNoPlantao() {
+  const agora = new Date();
+
+  // Horário de Porto Velho (UTC-4)
+  const portoVelho = new Date(
+    agora.toLocaleString("en-US", {
+      timeZone: "America/Porto_Velho"
+    })
+  );
+
+  const dia = portoVelho.getDay(); // 0 = domingo | 6 = sábado
+
+  const hora =
+    portoVelho.getHours() +
+    portoVelho.getMinutes() / 60;
+
+  // Sábado a partir das 12:00
+  if (dia === 6 && hora >= 12) {
+    return true;
+  }
+
+  // Domingo até 16:00
+  if (dia === 0 && hora < 16) {
+    return true;
+  }
+
+  return false;
+}
+
 function mensagemBoasVindas() {
   return `👋 Olá! Seja bem-vindo ao atendimento de plantão da ATOS TELECOM.
 
@@ -536,16 +565,18 @@ app.post("/opa/webhook", async (req, res) => {
       return;
     }
 
+    if (!estaNoPlantao()) {
+    console.log("Fora do horário do plantão. OPA continuará o fluxo normal.");
+    return;
+}
+
     if (!payload?._id) {
       console.log("Evento sem ID de atendimento.");
       return;
     }
 
     const atendimento = await buscarAtendimentoOPA(payload._id);
-    console.log("===== ATENDIMENTO COMPLETO OPA =====");
-console.log(JSON.stringify(atendimento, null, 2));
-console.log("===== FIM ATENDIMENTO COMPLETO OPA =====");
-
+    
     const cpf = atendimento.id_cliente?.cpf_cnpj;
 
     if (!cpf) {
