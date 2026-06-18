@@ -484,8 +484,9 @@ ${endereco}
 🌐 Último IP: ${pppoe.ip || "não informado"}
 📡 Concentrador: ${pppoe.concentrador || "não informado"}
 
-📝 Origem:
-Atendimento vindo do OPA Suite após cliente informar que reiniciou os equipamentos e não resolveu.
+⚠️ IMPORTANTE🚨
+
+Entre em contato com o cliente antes de sair para confirmar o endereço do atendimento, pois ele possui mais de um contrato cadastrado.
 
 ⚠️ Ao finalizar o atendimento, coloque o nome do cliente na lista de serviços do grupo com ✅.`;
 
