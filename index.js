@@ -14,6 +14,9 @@ const EVOLUTION_INSTANCE = process.env.EVOLUTION_INSTANCE || "atos-teste";
 const STATUS_CPF_URL = process.env.STATUS_CPF_URL;
 const TECNICO_NUMERO = process.env.TECNICO_NUMERO;
 
+const OPA_BASE_URL = process.env.OPA_BASE_URL;
+const OPA_TOKEN = process.env.OPA_TOKEN;
+
 const sessoes = new Map();
 const timersEncerramento = new Map();
 
@@ -186,6 +189,25 @@ async function consultarCpf(cpf) {
   const response = await axios.get(`${STATUS_CPF_URL}?cpf=${cpf}`);
   return response.data;
 }
+
+async function buscarAtendimentoOPA(atendimentoId) {
+  if (!OPA_BASE_URL || !OPA_TOKEN) {
+    throw new Error("OPA_BASE_URL ou OPA_TOKEN não configurado no Railway");
+  }
+
+  const response = await axios.get(
+    `${OPA_BASE_URL}/api/v1/atendimento/${atendimentoId}`,
+    {
+      headers: {
+        Authorization: `Bearer ${OPA_TOKEN}`,
+        "Content-Type": "application/json"
+      }
+    }
+  );
+
+  return response.data?.data || response.data;
+}
+
 function mensagemBoasVindas() {
   return `👋 Olá! Seja bem-vindo ao atendimento de plantão da ATOS TELECOM.
 
@@ -427,20 +449,49 @@ Responda apenas com o número do acesso.`);
 }
 
 app.get("/opa/webhook", (req, res) => {
-    res.status(200).json({
-        status: "ok",
-        message: "Webhook OPA funcionando"
-    });
+  res.status(200).json({
+    status: "ok",
+    message: "Webhook OPA funcionando"
+  });
 });
 
-app.post("/opa/webhook", (req, res) => {
+app.post("/opa/webhook", async (req, res) => {
+  res.status(200).json({
+    success: true
+  });
+
+  try {
     console.log("Webhook OPA recebido:");
     console.log(JSON.stringify(req.body, null, 2));
 
-    res.status(200).json({
-        success: true
-    });
+    const evento = req.body?.event;
+
+    if (evento?.type !== "customerServiceEvent") {
+      console.log("Evento ignorado: não é customerServiceEvent");
+      return;
+    }
+
+    const action = evento.data?.action;
+    const payload = evento.data?.payload;
+    const atendimentoId = payload?._id;
+
+    if (!atendimentoId) {
+      console.log("Evento OPA sem ID de atendimento");
+      return;
+    }
+
+    console.log("Ação OPA:", action);
+    console.log("ID atendimento OPA:", atendimentoId);
+
+    const atendimento = await buscarAtendimentoOPA(atendimentoId);
+
+    console.log("Atendimento completo buscado na API do OPA:");
+    console.log(JSON.stringify(atendimento, null, 2));
+  } catch (error) {
+    console.error("Erro ao processar webhook OPA:", error.response?.data || error.message);
+  }
 });
+
 app.get("/", (req, res) => {
   res.send("Bot Atos WhatsApp online ✅");
 });
