@@ -541,6 +541,9 @@ app.post("/opa/webhook", async (req, res) => {
     }
 
     const atendimento = await buscarAtendimentoOPA(payload._id);
+    console.log("===== ATENDIMENTO COMPLETO OPA =====");
+console.log(JSON.stringify(atendimento, null, 2));
+console.log("===== FIM ATENDIMENTO COMPLETO OPA =====");
 
     const cpf = atendimento.id_cliente?.cpf_cnpj;
 
