@@ -435,7 +435,7 @@ app.get("/opa/webhook", (req, res) => {
 
 app.post("/opa/webhook", (req, res) => {
     console.log("Webhook OPA recebido:");
-    console.log(req.body);
+    console.log(JSON.stringify(req.body, null, 2));
 
     res.status(200).json({
         success: true
