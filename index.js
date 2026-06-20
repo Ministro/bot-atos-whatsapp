@@ -305,6 +305,32 @@ function escolherBoleto(registros) {
   return vencido || ordenados[0] || null;
 }
 
+async function consultarDadosBoleto(idBoleto) {
+  const auth = getAuthIXC();
+
+  const params = {
+    boletos: String(idBoleto),
+    juro: "N",
+    multa: "N",
+    atualiza_boleto: "N",
+    tipo_boleto: "dados"
+  };
+
+  const response = await axios.post(
+    `${IXC_URL}/get_boleto`,
+    params,
+    {
+      headers: {
+        Authorization: `Basic ${auth}`,
+        "Content-Type": "application/json",
+        ixcsoft: "listar"
+      }
+    }
+  );
+
+  return response.data;
+}
+
 async function enviarBoletoOuPix(numero, sessao) {
   const idCliente = sessao?.cliente?.id;
 
@@ -321,14 +347,28 @@ async function enviarBoletoOuPix(numero, sessao) {
   const dados = await consultarBoletosPorCliente(idCliente);
 
   console.log("===== BOLETOS IXC =====");
-  console.log(JSON.stringify(dados, null, 2));
-  console.log("===== FIM BOLETOS IXC =====");
-  const boleto = escolherBoleto(dados.registros || []);
+console.log(JSON.stringify(dados, null, 2));
+console.log("===== FIM BOLETOS IXC =====");
+
+const boleto = escolherBoleto(dados.registros || []);
+
+if (!boleto) {
+  await enviarMensagem(
+    numero,
+    "Não encontrei boletos em aberto para este contrato."
+  );
+  return;
+}
 
 console.log("===== BOLETO ESCOLHIDO =====");
 console.log(JSON.stringify(boleto, null, 2));
 console.log("===== FIM BOLETO ESCOLHIDO =====");
 
+const dadosBoleto = await consultarDadosBoleto(boleto.id);
+
+console.log("===== DADOS BOLETO =====");
+console.log(JSON.stringify(dadosBoleto, null, 2));
+console.log("===== FIM DADOS BOLETO =====");
   await enviarMensagem(
     numero,
     "Consulta realizada. Vou verificar os dados da fatura."
