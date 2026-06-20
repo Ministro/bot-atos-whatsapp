@@ -630,6 +630,11 @@ app.post("/webhook", async (req, res) => {
 
     if (key.fromMe) return res.sendStatus(200);
 
+    // Ignora mensagens de grupos
+if (key.remoteJid?.endsWith("@g.us")) {
+  return res.sendStatus(200);
+}
+
     const numero = key.remoteJid?.replace("@s.whatsapp.net", "");
 
     const texto =
