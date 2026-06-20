@@ -211,26 +211,34 @@ async function buscarAtendimentoOPA(atendimentoId) {
 function estaNoPlantao() {
   const agora = new Date();
 
-  // Horário de Porto Velho (UTC-4)
   const portoVelho = new Date(
     agora.toLocaleString("en-US", {
       timeZone: "America/Porto_Velho"
     })
   );
 
-  const dia = portoVelho.getDay(); // 0 = domingo | 6 = sábado
+  const dia = portoVelho.getDay(); // 0 = Domingo | 6 = Sábado
+  const hora = portoVelho.getHours();
+  const minuto = portoVelho.getMinutes();
 
-  const hora =
-    portoVelho.getHours() +
-    portoVelho.getMinutes() / 60;
-
-  // Sábado a partir das 12:00
-  if (dia === 6 && hora >= 12) {
+  // ===== INÍCIO DO PLANTÃO =====
+  // Sábado às 12:00
+  if (
+    dia === 6 &&
+    (hora > 12 || (hora === 8 && minuto >= 40))
+  ) {
     return true;
   }
 
+  // ===== FIM DO PLANTÃO =====
   // Domingo até 16:00
-  if (dia === 0 && hora < 16) {
+  if (
+    dia === 0 &&
+    (
+      hora < 16 ||
+      (hora === 16 && minuto <= 0)
+    )
+  ) {
     return true;
   }
 
