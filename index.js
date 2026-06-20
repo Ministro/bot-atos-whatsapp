@@ -15,9 +15,6 @@ const STATUS_CPF_URL = process.env.STATUS_CPF_URL;
 const TECNICO_NUMERO = process.env.TECNICO_NUMERO;
 
 const OPA_BASE_URL = process.env.OPA_BASE_URL;
-const IXC_URL = process.env.IXC_URL;
-const IXC_USER = process.env.IXC_USER;
-const IXC_PASS = process.env.IXC_PASS;
 const OPA_TOKEN = process.env.OPA_TOKEN;
 
 const sessoes = new Map();
@@ -246,63 +243,6 @@ function estaNoPlantao() {
   }
 
   return false;
-}
-
-function getAuthIXC() {
-  return Buffer.from(`${IXC_USER}:${IXC_PASS}`).toString("base64");
-}
-
-async function consultarBoletosPorCliente(idCliente) {
-  const auth = getAuthIXC();
-
-  const params = {
-    qtype: "fn_areceber.id_cliente",
-query: String(idCliente),
-    oper: "=",
-    page: "1",
-    rp: "20",
-    sortname: "fn_areceber.data_vencimento",
-    sortorder: "asc",
-    grid_param: JSON.stringify([
-      { TB: "fn_areceber.liberado", OP: "=", P: "S" },
-      { TB: "fn_areceber.status", OP: "!=", P: "C" },
-      { TB: "fn_areceber.status", OP: "!=", P: "R" }
-    ])
-  };
-
-  const response = await axios.post(
-    `${IXC_URL}/fn_areceber`,
-    params,
-    {
-        headers: {
-            Authorization: `Basic ${auth}`,
-            "Content-Type": "application/json",
-            ixcsoft: "listar"
-        }
-    }
-);
-
-return response.data;
-}
-
-async function enviarBoletoOuPix(numero, sessao) {
-  async function enviarBoletoOuPix(numero, sessao) {
-  const idCliente = sessao?.cliente?.id;
-
-  if (!idCliente) {
-    await enviarMensagem(numero, "Não consegui identificar o cliente para localizar a fatura.");
-    return;
-  }
-
-  await enviarMensagem(numero, "🔎 Consultando faturas em aberto...");
-
-  const dados = await consultarBoletosPorCliente(idCliente);
-
-  console.log("===== BOLETOS IXC =====");
-  console.log(JSON.stringify(dados, null, 2));
-  console.log("===== FIM BOLETOS IXC =====");
-
-  await enviarMensagem(numero, "Consulta realizada. Vou verificar os dados da fatura.");
 }
 
 function mensagemBoasVindas() {
@@ -761,9 +701,12 @@ Agradecemos pela compreensão.`);
       }
 
       if (contemFinanceiro(texto)) {
-  await enviarBoletoOuPix(numero, sessao);
-  return res.sendStatus(200);
-}
+        await enviarMensagem(numero, mensagemFinanceiro());
+
+        sessoes.set(numero, { etapa: "encerramento" });
+        iniciarEncerramento(numero);
+        return res.sendStatus(200);
+      }
 
       if (contemLentidao(texto)) {
         await enviarMensagem(
