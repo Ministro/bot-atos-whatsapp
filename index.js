@@ -285,6 +285,26 @@ query: String(idCliente),
 return response.data;
 }
 
+function escolherBoleto(registros) {
+  const boletos = Array.isArray(registros) ? registros : [];
+
+  if (!boletos.length) return null;
+
+  const hoje = new Date();
+  hoje.setHours(0, 0, 0, 0);
+
+  const ordenados = boletos
+    .filter(b => b.status !== "C" && b.status !== "R")
+    .sort((a, b) => new Date(a.data_vencimento) - new Date(b.data_vencimento));
+
+  const vencido = ordenados.find(b => {
+    const venc = new Date(`${b.data_vencimento}T00:00:00`);
+    return venc < hoje;
+  });
+
+  return vencido || ordenados[0] || null;
+}
+
 async function enviarBoletoOuPix(numero, sessao) {
   const idCliente = sessao?.cliente?.id;
 
@@ -303,6 +323,11 @@ async function enviarBoletoOuPix(numero, sessao) {
   console.log("===== BOLETOS IXC =====");
   console.log(JSON.stringify(dados, null, 2));
   console.log("===== FIM BOLETOS IXC =====");
+  const boleto = escolherBoleto(dados.registros || []);
+
+console.log("===== BOLETO ESCOLHIDO =====");
+console.log(JSON.stringify(boleto, null, 2));
+console.log("===== FIM BOLETO ESCOLHIDO =====");
 
   await enviarMensagem(
     numero,
