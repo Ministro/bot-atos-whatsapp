@@ -225,7 +225,7 @@ function estaNoPlantao() {
     portoVelho.getMinutes() / 60;
 
   // Sábado a partir das 12:00
-  if (dia === 6 && hora >= 08) {
+  if (dia === 6 && hora >= 8) {
     return true;
   }
 
