@@ -346,10 +346,6 @@ async function enviarBoletoOuPix(numero, sessao) {
 
   const dados = await consultarBoletosPorCliente(idCliente);
 
-  console.log("===== BOLETOS IXC =====");
-console.log(JSON.stringify(dados, null, 2));
-console.log("===== FIM BOLETOS IXC =====");
-
 const boleto = escolherBoleto(dados.registros || []);
 
 if (!boleto) {
