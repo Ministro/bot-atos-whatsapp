@@ -360,15 +360,25 @@ console.log("===== BOLETO ESCOLHIDO =====");
 console.log(JSON.stringify(boleto, null, 2));
 console.log("===== FIM BOLETO ESCOLHIDO =====");
 
-const dadosBoleto = await consultarDadosBoleto(boleto.id);
+const valor = String(boleto.valor_aberto || boleto.valor || "0.00").replace(".", ",");
+const vencimento = boleto.data_vencimento || "não informado";
+const linhaDigitavel = boleto.linha_digitavel || "";
 
-console.log("===== DADOS BOLETO =====");
-console.log(JSON.stringify(dadosBoleto, null, 2));
-console.log("===== FIM DADOS BOLETO =====");
-  await enviarMensagem(
-    numero,
-    "Consulta realizada. Vou verificar os dados da fatura."
-  );
+if (linhaDigitavel) {
+  await enviarMensagem(numero, `💳 Fatura encontrada
+
+📅 Vencimento: ${vencimento}
+💰 Valor: R$ ${valor}
+
+📄 Linha digitável:
+${linhaDigitavel}`);
+  return;
+}
+
+await enviarMensagem(
+  numero,
+  "Não consegui gerar a linha digitável automaticamente. Acesse a Central do Assinante ou aguarde nosso atendimento."
+);
 }
 
 function mensagemBoasVindas() {
