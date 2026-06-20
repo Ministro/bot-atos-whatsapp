@@ -377,7 +377,15 @@ ${linhaDigitavel}`);
 
 await enviarMensagem(
   numero,
-  "Não consegui gerar a linha digitável automaticamente. Acesse a Central do Assinante ou aguarde nosso atendimento."
+  " Não consegui gerar seu boleto automaticamente.
+
+Acesse a Central do Assinante:
+https://cliente.atostelecom.com.br/central_assinante_web/
+
+Login: CPF (somente números)
+Senha: 1020 ou os 6 primeiros dígitos do CPF.
+
+Se precisar, estou à disposição."
 );
 }
 
