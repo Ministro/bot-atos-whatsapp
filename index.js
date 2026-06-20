@@ -610,6 +610,11 @@ app.get("/", (req, res) => {
 
 app.post("/webhook", async (req, res) => {
   try {
+        if (!estaNoPlantao()) {
+      console.log("Fora do horário do plantão. Webhook WhatsApp ignorado.");
+      return res.sendStatus(200);
+    }
+    
     const body = req.body;
     const data = body.data || body;
     const key = data.key || {};
