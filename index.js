@@ -225,7 +225,7 @@ function estaNoPlantao() {
   // Sábado às 12:00
   if (
     dia === 6 &&
-    (hora > 12 || (hora === 8 && minuto >= 00))
+    (hora > 12 || (hora === 12 && minuto >= 00))
   ) {
     return true;
   }
