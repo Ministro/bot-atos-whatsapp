@@ -455,7 +455,7 @@ ${endereco}
 
 Como posso ajudar?
 
-• Boleto ou PIX para pagamento
+• Boleto para pagamento
 • Lentidão ou oscilação
 • Outro assunto`;
 }
