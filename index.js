@@ -354,6 +354,28 @@ base64: "S"
   return response.data;
 }
 
+async function consultarPixBoleto(idBoleto) {
+  const auth = getAuthIXC();
+
+  const params = {
+    id: String(idBoleto)
+  };
+
+  const response = await axios.post(
+    `${IXC_URL}/get_pix`,
+    params,
+    {
+      headers: {
+        Authorization: `Basic ${auth}`,
+        "Content-Type": "application/json",
+        ixcsoft: "listar"
+      }
+    }
+  );
+
+  return response.data;
+}
+
 async function enviarBoletoOuPix(numero, sessao) {
   const idCliente = sessao?.cliente?.id;
 
@@ -393,6 +415,11 @@ console.log("===== PDF BASE64 IXC =====");
 console.log(JSON.stringify(pdfBoleto, null, 2).slice(0, 1000));
 console.log("===== FIM PDF BASE64 IXC =====");
 
+  const pixBoleto = await consultarPixBoleto(boleto.id);
+
+console.log("===== PIX IXC =====");
+console.log(JSON.stringify(pixBoleto, null, 2).slice(0, 1500));
+console.log("===== FIM PIX IXC =====");
 await enviarPdfBoleto(numero, pdfBoleto, `boleto-${boleto.id}.pdf`);
 
 if (linhaDigitavel) {
