@@ -727,6 +727,15 @@ app.post("/opa/webhook", async (req, res) => {
   res.status(200).json({ success: true });
 
   try {
+    console.log("====================================");
+console.log("WEBHOOK OPA RECEBIDO");
+console.log("Headers:");
+console.log(JSON.stringify(req.headers, null, 2));
+
+console.log("Body completo:");
+console.log(JSON.stringify(req.body, null, 2));
+
+console.log("====================================");
     const evento = req.body?.event;
 
     if (!evento || evento.type !== "customerServiceEvent") return;
@@ -766,6 +775,9 @@ app.post("/opa/webhook", async (req, res) => {
     }
 
     const atendimento = await buscarAtendimentoOPA(payload._id);
+    console.log("===== ATENDIMENTO COMPLETO OPA =====");
+console.log(JSON.stringify(atendimento, null, 2));
+console.log("===== FIM ATENDIMENTO =====");
     
     const cpf = atendimento.id_cliente?.cpf_cnpj;
 
