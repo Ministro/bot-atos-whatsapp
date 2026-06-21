@@ -425,9 +425,7 @@ for (const idPix of idsPixTeste) {
   console.log(`===== FIM PIX IXC TESTE ID ${idPix} =====`);
 }
 
-console.log("===== PIX IXC =====");
-console.log(JSON.stringify(pixBoleto, null, 2).slice(0, 1500));
-console.log("===== FIM PIX IXC =====");
+
 await enviarPdfBoleto(numero, pdfBoleto, `boleto-${boleto.id}.pdf`);
 
 if (linhaDigitavel) {
