@@ -392,7 +392,8 @@ const linhaDigitavel = boleto.linha_digitavel || "";
 console.log("===== PDF BASE64 IXC =====");
 console.log(JSON.stringify(pdfBoleto, null, 2).slice(0, 1000));
 console.log("===== FIM PDF BASE64 IXC =====");
-  await enviarPdfBoleto(numero, pdfBoleto, `boleto-${boleto.id}.pdf`);
+
+await enviarPdfBoleto(numero, pdfBoleto, `boleto-${boleto.id}.pdf`);
 
 if (linhaDigitavel) {
   await enviarMensagem(numero, `💳 Fatura encontrada
@@ -402,21 +403,9 @@ if (linhaDigitavel) {
 
 📄 Linha digitável:
 ${linhaDigitavel}`);
-  return;
 }
 
-await enviarMensagem(
-  numero,
-  `Não consegui gerar seu boleto automaticamente.
-
-Acesse a Central do Assinante:
-https://cliente.atostelecom.com.br/central_assinante_web/
-
-Login: CPF do titular
-Senha: 1020 ou os 6 primeiros dígitos do CPF.
-
-Se precisar, estou à disposição.`
-);
+return;
 }
 
 function mensagemBoasVindas() {
