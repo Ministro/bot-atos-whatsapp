@@ -331,34 +331,6 @@ async function consultarDadosBoleto(idBoleto) {
   return response.data;
 }
 
-async function consultarPixOPA(idTitulo) {
-  if (!OPA_BASE_URL) return null;
-
-  try {
-    const params = new URLSearchParams();
-    params.append("idTitulo", String(idTitulo));
-    params.append("idAtendimento", "");
-    params.append("language", "pt");
-
-    const response = await axios.post(
-      `${OPA_BASE_URL}/integracoes/erp/get-pix-data-for-meta`,
-      params,
-      {
-        headers: {
-          "Content-Type": "application/x-www-form-urlencoded",
-          ...(OPA_TOKEN ? { Authorization: `Bearer ${OPA_TOKEN}` } : {})
-        }
-      }
-    );
-
-    return response.data;
-  } catch (error) {
-    console.log("Erro ao consultar PIX OPA:");
-    console.log(error.response?.data || error.message);
-    return null;
-  }
-}
-
 async function enviarBoletoOuPix(numero, sessao) {
   const idCliente = sessao?.cliente?.id;
 
@@ -392,24 +364,14 @@ const valor = String(boleto.valor_aberto || boleto.valor || "0.00").replace(".",
 const vencimento = boleto.data_vencimento || "não informado";
 const linhaDigitavel = boleto.linha_digitavel || "";
 
-const pix = await consultarPixOPA(boleto.id);
-const pixCopiaCola = pix?.code || "";
-
-console.log("===== PIX OPA =====");
-console.log(JSON.stringify(pix, null, 2));
-console.log("===== FIM PIX OPA =====");
-
-if (linhaDigitavel || pixCopiaCola) {
+if (linhaDigitavel) {
   await enviarMensagem(numero, `💳 Fatura encontrada
 
 📅 Vencimento: ${vencimento}
 💰 Valor: R$ ${valor}
 
-${linhaDigitavel ? `📄 Linha digitável:
-${linhaDigitavel}` : ""}
-
-${pixCopiaCola ? `📲 PIX Copia e Cola:
-${pixCopiaCola}` : ""}`);
+📄 Linha digitável:
+${linhaDigitavel}`);
   return;
 }
 
@@ -727,15 +689,6 @@ app.post("/opa/webhook", async (req, res) => {
   res.status(200).json({ success: true });
 
   try {
-    console.log("====================================");
-console.log("WEBHOOK OPA RECEBIDO");
-console.log("Headers:");
-console.log(JSON.stringify(req.headers, null, 2));
-
-console.log("Body completo:");
-console.log(JSON.stringify(req.body, null, 2));
-
-console.log("====================================");
     const evento = req.body?.event;
 
     if (!evento || evento.type !== "customerServiceEvent") return;
@@ -775,9 +728,6 @@ console.log("====================================");
     }
 
     const atendimento = await buscarAtendimentoOPA(payload._id);
-    console.log("===== ATENDIMENTO COMPLETO OPA =====");
-console.log(JSON.stringify(atendimento, null, 2));
-console.log("===== FIM ATENDIMENTO =====");
     
     const cpf = atendimento.id_cliente?.cpf_cnpj;
 
