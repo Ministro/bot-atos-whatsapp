@@ -415,7 +415,7 @@ console.log("===== PDF BASE64 IXC =====");
 console.log(JSON.stringify(pdfBoleto, null, 2).slice(0, 1000));
 console.log("===== FIM PDF BASE64 IXC =====");
 
-  const pixBoleto = await consultarPixBoleto(boleto.id);
+  const pixBoleto = await consultarPixBoleto(boleto.boleto || boleto.id);
 
 console.log("===== PIX IXC =====");
 console.log(JSON.stringify(pixBoleto, null, 2).slice(0, 1500));
