@@ -313,7 +313,7 @@ async function consultarDadosBoleto(idBoleto) {
     juro: "N",
     multa: "N",
     atualiza_boleto: "N",
-    tipo_boleto: "dados"
+    tipo_boleto: "arquivo"
   };
 
   const response = await axios.post(
@@ -363,6 +363,12 @@ console.log("===== FIM BOLETO ESCOLHIDO =====");
 const valor = String(boleto.valor_aberto || boleto.valor || "0.00").replace(".", ",");
 const vencimento = boleto.data_vencimento || "não informado";
 const linhaDigitavel = boleto.linha_digitavel || "";
+  
+  const pdfBoleto = await consultarDadosBoleto(boleto.id);
+
+console.log("===== PDF BOLETO IXC =====");
+console.log(JSON.stringify(pdfBoleto, null, 2));
+console.log("===== FIM PDF BOLETO IXC =====");
 
 if (linhaDigitavel) {
   await enviarMensagem(numero, `💳 Fatura encontrada
