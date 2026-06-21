@@ -188,6 +188,28 @@ async function enviarMensagem(numero, texto) {
   );
 }
 
+async function enviarPdfBoleto(numero, base64Pdf, nomeArquivo = "boleto.pdf") {
+  const base64Limpo = String(base64Pdf || "").replace(/^data:application\/pdf;base64,/, "");
+
+  await axios.post(
+    `${EVOLUTION_URL}/message/sendMedia/${EVOLUTION_INSTANCE}`,
+    {
+      number: numero,
+      mediatype: "document",
+      mimetype: "application/pdf",
+      caption: "📄 Segue seu boleto em PDF.",
+      fileName: nomeArquivo,
+      media: base64Limpo
+    },
+    {
+      headers: {
+        apikey: EVOLUTION_API_KEY,
+        "Content-Type": "application/json"
+      }
+    }
+  );
+}
+
 async function consultarCpf(cpf) {
   const response = await axios.get(`${STATUS_CPF_URL}?cpf=${cpf}`);
   return response.data;
@@ -370,6 +392,7 @@ const linhaDigitavel = boleto.linha_digitavel || "";
 console.log("===== PDF BASE64 IXC =====");
 console.log(JSON.stringify(pdfBoleto, null, 2).slice(0, 1000));
 console.log("===== FIM PDF BASE64 IXC =====");
+  await enviarPdfBoleto(numero, pdfBoleto, `boleto-${boleto.id}.pdf`);
 
 if (linhaDigitavel) {
   await enviarMensagem(numero, `💳 Fatura encontrada
