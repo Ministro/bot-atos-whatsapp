@@ -331,6 +331,34 @@ async function consultarDadosBoleto(idBoleto) {
   return response.data;
 }
 
+async function consultarPixOPA(idTitulo) {
+  if (!OPA_BASE_URL) return null;
+
+  try {
+    const params = new URLSearchParams();
+    params.append("idTitulo", String(idTitulo));
+    params.append("idAtendimento", "");
+    params.append("language", "pt");
+
+    const response = await axios.post(
+      `${OPA_BASE_URL}/integracoes/erp/get-pix-data-for-meta`,
+      params,
+      {
+        headers: {
+          "Content-Type": "application/x-www-form-urlencoded",
+          ...(OPA_TOKEN ? { Authorization: `Bearer ${OPA_TOKEN}` } : {})
+        }
+      }
+    );
+
+    return response.data;
+  } catch (error) {
+    console.log("Erro ao consultar PIX OPA:");
+    console.log(error.response?.data || error.message);
+    return null;
+  }
+}
+
 async function enviarBoletoOuPix(numero, sessao) {
   const idCliente = sessao?.cliente?.id;
 
@@ -364,14 +392,24 @@ const valor = String(boleto.valor_aberto || boleto.valor || "0.00").replace(".",
 const vencimento = boleto.data_vencimento || "não informado";
 const linhaDigitavel = boleto.linha_digitavel || "";
 
-if (linhaDigitavel) {
+const pix = await consultarPixOPA(boleto.id);
+const pixCopiaCola = pix?.code || "";
+
+console.log("===== PIX OPA =====");
+console.log(JSON.stringify(pix, null, 2));
+console.log("===== FIM PIX OPA =====");
+
+if (linhaDigitavel || pixCopiaCola) {
   await enviarMensagem(numero, `💳 Fatura encontrada
 
 📅 Vencimento: ${vencimento}
 💰 Valor: R$ ${valor}
 
-📄 Linha digitável:
-${linhaDigitavel}`);
+${linhaDigitavel ? `📄 Linha digitável:
+${linhaDigitavel}` : ""}
+
+${pixCopiaCola ? `📲 PIX Copia e Cola:
+${pixCopiaCola}` : ""}`);
   return;
 }
 
