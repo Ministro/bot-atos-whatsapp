@@ -354,28 +354,6 @@ base64: "S"
   return response.data;
 }
 
-async function consultarPixBoleto(idBoleto) {
-  const auth = getAuthIXC();
-
-  const params = {
-    id: String(idBoleto)
-  };
-
-  const response = await axios.post(
-    `${IXC_URL}/get_pix`,
-    params,
-    {
-      headers: {
-        Authorization: `Basic ${auth}`,
-        "Content-Type": "application/json",
-        ixcsoft: "listar"
-      }
-    }
-  );
-
-  return response.data;
-}
-
 async function enviarBoletoOuPix(numero, sessao) {
   const idCliente = sessao?.cliente?.id;
 
@@ -411,31 +389,20 @@ const linhaDigitavel = boleto.linha_digitavel || "";
   
   const pdfBoleto = await consultarDadosBoleto(boleto.id);
 
-console.log("===== PDF BASE64 IXC =====");
-console.log(JSON.stringify(pdfBoleto, null, 2).slice(0, 1000));
-console.log("===== FIM PDF BASE64 IXC =====");
-
-  const idsPixTeste = [boleto.id, boleto.boleto, boleto.nn_boleto].filter(Boolean);
-
-for (const idPix of idsPixTeste) {
-  const pixTeste = await consultarPixBoleto(idPix);
-
-  console.log(`===== PIX IXC TESTE ID ${idPix} =====`);
-  console.log(JSON.stringify(pixTeste, null, 2).slice(0, 1500));
-  console.log(`===== FIM PIX IXC TESTE ID ${idPix} =====`);
-}
-
-
 await enviarPdfBoleto(numero, pdfBoleto, `boleto-${boleto.id}.pdf`);
 
 if (linhaDigitavel) {
-  await enviarMensagem(numero, `💳 Fatura encontrada
+  await enviarMensagem(
+    numero,
+    `💳 Fatura encontrada
 
 📅 Vencimento: ${vencimento}
 💰 Valor: R$ ${valor}
 
 📄 Linha digitável:
-${linhaDigitavel}`);
+
+${linhaDigitavel}`
+  );
 }
 
 return;
