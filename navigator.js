@@ -44,7 +44,7 @@ function formatarDispositivos(lista) {
   return lista.map((d, i) => {
     return `📱 Aparelho ${i + 1}
 🔗 MAC: ${d.mac || "Não informado"}
-🚀 Velocidade TX: ${d.txRate || "0"} Mbps`;
+🚀 Velocidade Da Conexão: ${d.txRate || "0"} Mbps`;
   }).join("\n\n");
 }
 
