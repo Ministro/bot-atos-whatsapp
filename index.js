@@ -5,7 +5,8 @@ const axios = require("axios");
 const {
   diagnosticarNavigator,
   montarMensagemDiagnostico,
-  montarMensagemAparelhosConectados
+  montarMensagemAparelhosConectados,
+  reiniciarRoteador
 } = require("./navigator");
 
 const app = express();
@@ -246,6 +247,10 @@ async function consultarDiagnosticoRemoto(ip) {
   );
 
   return response.data;
+}
+
+async function reiniciarRoteadorRemoto(ip) {
+  return await reiniciarRoteador(ip);
 }
 
 async function enviarPdfBoleto(numero, base64Pdf, nomeArquivo = "boleto.pdf") {
@@ -1338,34 +1343,74 @@ Um atendente entrará em contato assim que possível ou no próximo dia útil pa
     }
 
     if (sessao?.etapa === "pos_diagnostico_lentidao") {
-      const opcao = String(texto || "").trim();
+  const opcao = String(texto || "").trim();
 
-      if (opcao === "1") {
-  await enviarMensagem(numero, `⚠️ A otimização de canal Wi-Fi ainda será adicionada.
-
-Um atendente dará continuidade por enquanto.`);
-  sessoes.set(numero, { etapa: "encerramento" });
-  iniciarEncerramento(numero);
-  return res.sendStatus(200);
-}
-
-if (opcao === "2") {
-  await enviarMensagem(numero, `⚠️ O reinício remoto do roteador ainda será adicionado.
+  if (opcao === "1") {
+    await enviarMensagem(numero, `⚠️ A otimização de canal Wi-Fi ainda será adicionada.
 
 Um atendente dará continuidade por enquanto.`);
-  sessoes.set(numero, { etapa: "encerramento" });
-  iniciarEncerramento(numero);
-  return res.sendStatus(200);
-}
+    sessoes.set(numero, { etapa: "encerramento" });
+    iniciarEncerramento(numero);
+    return res.sendStatus(200);
+  }
 
-if (opcao === "3" || contemTrocarSenhaWifi(texto)) {
-  sessoes.set(numero, {
-    etapa: "confirmar_troca_senha_wifi_5g",
-    cliente: sessao.cliente,
-    pppoe: sessao.pppoe
-  });
+  if (opcao === "2") {
+    const ipCliente = sessao.pppoe?.ip;
 
-  await enviarMensagem(numero, `⚠️ ATENÇÃO
+    if (!ipCliente) {
+      await enviarMensagem(numero, "⚠️ Não consegui localizar o IP do roteador.");
+      return res.sendStatus(200);
+    }
+
+    await enviarMensagem(
+      numero,
+      "🔄 Enviando comando de reinicialização do roteador..."
+    );
+
+    try {
+      const resultado = await reiniciarRoteadorRemoto(ipCliente);
+
+      if (resultado.sucesso) {
+        await enviarMensagem(
+          numero,
+`✅ Comando enviado com sucesso!
+
+Seu roteador será reiniciado agora.
+
+⏳ Aguarde aproximadamente 2 minutos.
+
+Durante esse período a internet ficará indisponível.`
+        );
+      } else {
+        await enviarMensagem(numero, resultado.mensagem);
+      }
+
+    } catch (erro) {
+      console.error(erro);
+
+      await enviarMensagem(
+        numero,
+        "⚠️ Não foi possível reiniciar o roteador remotamente."
+      );
+    }
+
+    sessoes.set(numero, {
+      etapa: "encerramento"
+    });
+
+    iniciarEncerramento(numero);
+
+    return res.sendStatus(200);
+  }
+
+  if (opcao === "3" || contemTrocarSenhaWifi(texto)) {
+    sessoes.set(numero, {
+      etapa: "confirmar_troca_senha_wifi_5g",
+      cliente: sessao.cliente,
+      pppoe: sessao.pppoe
+    });
+
+    await enviarMensagem(numero, `⚠️ ATENÇÃO
 
 A senha será alterada exatamente como você enviar aqui.
 
@@ -1377,23 +1422,51 @@ Deseja continuar?
 
 1️⃣ Sim
 2️⃣ Não`);
+
+    return res.sendStatus(200);
+  }
+
+  if (opcao === "4") {
+    const mensagem = montarMensagemAparelhosConectados(sessao.diagnostico);
+
+    await enviarMensagem(numero, mensagem);
+
+    sessoes.set(numero, {
+      etapa: "pos_aparelhos_conectados",
+      cliente: sessao.cliente,
+      pppoe: sessao.pppoe,
+      diagnostico: sessao.diagnostico
+    });
+
+    return res.sendStatus(200);
+  }
+
+  if (opcao === "5") {
+    await enviarMensagem(numero, `Entendido.
+
+Um atendente dará continuidade ao atendimento.`);
+
+    sessoes.set(numero, {
+      etapa: "encerramento"
+    });
+
+    iniciarEncerramento(numero);
+
+    return res.sendStatus(200);
+  }
+
+  await enviarMensagem(numero, `Opção inválida.
+
+Responda apenas:
+
+1️⃣ Otimizar canal do Wi-Fi
+2️⃣ Reiniciar roteador
+3️⃣ Trocar senha do Wi-Fi
+4️⃣ Ver aparelhos conectados
+5️⃣ Falar com atendente`);
+
   return res.sendStatus(200);
 }
-
-if (opcao === "4") {
-  await enviarMensagem(numero, `📶 A leitura detalhada dos aparelhos conectados será adicionada na próxima etapa.
-
-Um atendente dará continuidade por enquanto.`);
-  sessoes.set(numero, { etapa: "encerramento" });
-  iniciarEncerramento(numero);
-  return res.sendStatus(200);
-}
-
-await enviarMensagem(numero, `Certo. Um atendente dará continuidade ao atendimento.`);
-sessoes.set(numero, { etapa: "encerramento" });
-iniciarEncerramento(numero);
-return res.sendStatus(200);
-    }
 
         if (sessao?.etapa === "pos_aparelhos_conectados") {
       const opcao = String(texto || "").trim();
@@ -1426,9 +1499,53 @@ Deseja continuar?
       }
 
       if (opcao === "3") {
-        await enviarMensagem(numero, "⚠️ O reinício remoto do roteador ainda será adicionado.");
-        return res.sendStatus(200);
-      }
+  const ipCliente = sessao.pppoe?.ip;
+
+  if (!ipCliente) {
+    await enviarMensagem(numero, "⚠️ Não consegui localizar o IP do roteador.");
+    return res.sendStatus(200);
+  }
+
+  await enviarMensagem(
+    numero,
+    "🔄 Enviando comando de reinicialização do roteador..."
+  );
+
+  try {
+    const resultado = await reiniciarRoteadorRemoto(ipCliente);
+
+    if (resultado.sucesso) {
+      await enviarMensagem(
+        numero,
+`✅ Comando enviado com sucesso!
+
+Seu roteador será reiniciado agora.
+
+⏳ Aguarde aproximadamente 2 minutos.
+
+Durante esse período a internet ficará indisponível.`
+      );
+    } else {
+      await enviarMensagem(numero, resultado.mensagem);
+    }
+
+  } catch (erro) {
+    console.error(erro);
+
+    await enviarMensagem(
+      numero,
+      "⚠️ Não foi possível reiniciar o roteador remotamente."
+    );
+  }
+
+  sessoes.set(numero, {
+    etapa: "encerramento"
+  });
+
+  iniciarEncerramento(numero);
+
+  return res.sendStatus(200);
+}
 
       if (opcao === "4") {
         sessoes.set(numero, {
