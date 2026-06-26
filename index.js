@@ -5,8 +5,7 @@ const axios = require("axios");
 const {
   diagnosticarNavigator,
   montarMensagemDiagnostico,
-  montarMensagemAparelhosConectados,
-  reiniciarRoteador
+  montarMensagemAparelhosConectados
 } = require("./navigator");
 
 const app = express();
@@ -252,6 +251,23 @@ async function consultarDiagnosticoRemoto(ip) {
 async function reiniciarRoteadorRemoto(ip) {
   const response = await axios.post(
     `${NAVIGATOR_API_URL}/reiniciar-roteador`,
+    { ip },
+    {
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${NAVIGATOR_API_TOKEN}`,
+        "ngrok-skip-browser-warning": "1"
+      },
+      timeout: 90000
+    }
+  );
+
+  return response.data;
+}
+
+async function otimizarCanalRemoto(ip) {
+  const response = await axios.post(
+    `${NAVIGATOR_API_URL}/otimizar-canal`,
     { ip },
     {
       headers: {
@@ -1359,13 +1375,64 @@ Um atendente entrará em contato assim que possível ou no próximo dia útil pa
   const opcao = String(texto || "").trim();
 
   if (opcao === "1") {
-    await enviarMensagem(numero, `⚠️ A otimização de canal Wi-Fi ainda será adicionada.
 
-Um atendente dará continuidade por enquanto.`);
-    sessoes.set(numero, { etapa: "encerramento" });
-    iniciarEncerramento(numero);
+  const ipCliente = sessao.pppoe?.ip;
+
+  if (!ipCliente) {
+    await enviarMensagem(numero, "⚠️ Não consegui localizar o IP do roteador.");
     return res.sendStatus(200);
   }
+
+  await enviarMensagem(
+    numero,
+    "📡 Otimizando os canais do Wi-Fi..."
+  );
+
+  try {
+
+    const resultado = await otimizarCanalRemoto(ipCliente);
+
+    if (resultado.sucesso) {
+
+      await enviarMensagem(
+        numero,
+`✅ Canais otimizados com sucesso!
+
+📶 5 GHz
+${resultado.canal5gAnterior} ➜ ${resultado.canal5gNovo}
+
+📶 2.4 GHz
+${resultado.canal24Anterior} ➜ ${resultado.canal24Novo}
+
+⏳ Aguarde alguns segundos para o Wi-Fi estabilizar.`
+      );
+
+    } else {
+
+      await enviarMensagem(numero, resultado.mensagem);
+
+    }
+
+  } catch (erro) {
+
+    console.error(erro);
+
+    await enviarMensagem(
+      numero,
+      "⚠️ Não foi possível otimizar os canais do Wi-Fi."
+    );
+
+  }
+
+  sessoes.set(numero,{
+    etapa:"encerramento"
+  });
+
+  iniciarEncerramento(numero);
+
+  return res.sendStatus(200);
+
+}
 
   if (opcao === "2") {
     const ipCliente = sessao.pppoe?.ip;
@@ -1507,9 +1574,64 @@ Deseja continuar?
       }
 
       if (opcao === "2") {
-        await enviarMensagem(numero, "⚠️ A otimização de canal Wi-Fi ainda será adicionada.");
-        return res.sendStatus(200);
-      }
+
+  const ipCliente = sessao.pppoe?.ip;
+
+  if (!ipCliente) {
+    await enviarMensagem(numero, "⚠️ Não consegui localizar o IP do roteador.");
+    return res.sendStatus(200);
+  }
+
+  await enviarMensagem(
+    numero,
+    "📡 Otimizando os canais do Wi-Fi..."
+  );
+
+  try {
+
+    const resultado = await otimizarCanalRemoto(ipCliente);
+
+    if (resultado.sucesso) {
+
+      await enviarMensagem(
+        numero,
+`✅ Canais otimizados com sucesso!
+
+📶 5 GHz
+${resultado.canal5gAnterior} ➜ ${resultado.canal5gNovo}
+
+📶 2.4 GHz
+${resultado.canal24Anterior} ➜ ${resultado.canal24Novo}
+
+⏳ Aguarde alguns segundos para o Wi-Fi estabilizar.`
+      );
+
+    } else {
+
+      await enviarMensagem(numero, resultado.mensagem);
+
+    }
+
+  } catch (erro) {
+
+    console.error(erro);
+
+    await enviarMensagem(
+      numero,
+      "⚠️ Não foi possível otimizar os canais do Wi-Fi."
+    );
+
+  }
+
+  sessoes.set(numero,{
+    etapa:"encerramento"
+  });
+
+  iniciarEncerramento(numero);
+
+  return res.sendStatus(200);
+
+}
 
       if (opcao === "3") {
   const ipCliente = sessao.pppoe?.ip;
@@ -1521,7 +1643,7 @@ Deseja continuar?
 
   await enviarMensagem(
     numero,
-    "🔄 Enviando comando de reinicialização do roteador..."
+    "🔄 Reiniciando seu roteador..."
   );
 
   try {
@@ -1530,9 +1652,9 @@ Deseja continuar?
     if (resultado.sucesso) {
       await enviarMensagem(
         numero,
-`✅ Comando enviado com sucesso!
+`✅ Roteaddor reiniciado com sucesso!
 
-Seu roteador será reiniciado agora.
+Esta reiniciando.
 
 ⏳ Aguarde aproximadamente 2 minutos.
 
