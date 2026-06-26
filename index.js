@@ -2,6 +2,7 @@ require("dotenv").config();
 
 const express = require("express");
 const axios = require("axios");
+const { diagnosticarNavigator, montarMensagemDiagnostico } = require("./navigator");
 
 const app = express();
 app.use(express.json({ limit: "20mb" }));
@@ -869,15 +870,40 @@ Agradecemos pela compreensão.`);
 }
 
       if (contemLentidao(texto)) {
-        await enviarMensagem(
-          numero,
-          mensagemOrientacaoConectado(sessao.cliente, sessao.pppoe)
-        );
+  const ipCliente = sessao.pppoe?.ip;
 
-        sessoes.set(numero, { etapa: "encerramento" });
-        iniciarEncerramento(numero);
-        return res.sendStatus(200);
-      }
+  if (!ipCliente || ipCliente === "não informado") {
+    await enviarMensagem(
+      numero,
+      mensagemOrientacaoConectado(sessao.cliente, sessao.pppoe)
+    );
+
+    sessoes.set(numero, { etapa: "encerramento" });
+    iniciarEncerramento(numero);
+    return res.sendStatus(200);
+  }
+
+  await enviarMensagem(numero, "🔎 Aguarde, estou verificando seu roteador remotamente...");
+
+  try {
+    const dados = await diagnosticarNavigator(ipCliente);
+    const mensagem = montarMensagemDiagnostico(dados);
+
+    await enviarMensagem(numero, mensagem);
+  } catch (erro) {
+    console.error("Erro no diagnóstico:", erro.message);
+
+    await enviarMensagem(
+      numero,
+      "⚠️ Não consegui acessar seu roteador automaticamente agora.\n\n" +
+      mensagemOrientacaoConectado(sessao.cliente, sessao.pppoe)
+    );
+  }
+
+  sessoes.set(numero, { etapa: "encerramento" });
+  iniciarEncerramento(numero);
+  return res.sendStatus(200);
+}
 
       await enviarMensagem(numero, `Entendido.
 
