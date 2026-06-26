@@ -1257,10 +1257,11 @@ Deseja continuar?
 
 O que deseja fazer agora?
 
-1️⃣ Trocar senha do Wi-Fi
-2️⃣ Otimizar canal Wi-Fi
-3️⃣ Reiniciar roteador
-4️⃣ Falar com atendente`);
+1️⃣ Otimizar canal do Wi-Fi
+2️⃣ Reiniciar roteador
+3️⃣ Trocar senha do Wi-Fi
+4️⃣ Ver aparelhos conectados
+5️⃣ Falar com atendente`);
 
           sessoes.set(numero, {
             etapa: "pos_diagnostico_lentidao",
@@ -1297,14 +1298,32 @@ Um atendente entrará em contato assim que possível ou no próximo dia útil pa
     if (sessao?.etapa === "pos_diagnostico_lentidao") {
       const opcao = String(texto || "").trim();
 
-      if (opcao === "1" || contemTrocarSenhaWifi(texto)) {
-        sessoes.set(numero, {
-          etapa: "confirmar_troca_senha_wifi_5g",
-          cliente: sessao.cliente,
-          pppoe: sessao.pppoe
-        });
+      if (opcao === "1") {
+  await enviarMensagem(numero, `⚠️ A otimização de canal Wi-Fi ainda será adicionada.
 
-        await enviarMensagem(numero, `⚠️ ATENÇÃO
+Um atendente dará continuidade por enquanto.`);
+  sessoes.set(numero, { etapa: "encerramento" });
+  iniciarEncerramento(numero);
+  return res.sendStatus(200);
+}
+
+if (opcao === "2") {
+  await enviarMensagem(numero, `⚠️ O reinício remoto do roteador ainda será adicionado.
+
+Um atendente dará continuidade por enquanto.`);
+  sessoes.set(numero, { etapa: "encerramento" });
+  iniciarEncerramento(numero);
+  return res.sendStatus(200);
+}
+
+if (opcao === "3" || contemTrocarSenhaWifi(texto)) {
+  sessoes.set(numero, {
+    etapa: "confirmar_troca_senha_wifi_5g",
+    cliente: sessao.cliente,
+    pppoe: sessao.pppoe
+  });
+
+  await enviarMensagem(numero, `⚠️ ATENÇÃO
 
 A senha será alterada exatamente como você enviar aqui.
 
@@ -1316,31 +1335,22 @@ Deseja continuar?
 
 1️⃣ Sim
 2️⃣ Não`);
-        return res.sendStatus(200);
-      }
+  return res.sendStatus(200);
+}
 
-      if (opcao === "2") {
-        await enviarMensagem(numero, `⚠️ A otimização de canal Wi-Fi ainda será adicionada.
-
-Um atendente dará continuidade por enquanto.`);
-        sessoes.set(numero, { etapa: "encerramento" });
-        iniciarEncerramento(numero);
-        return res.sendStatus(200);
-      }
-
-      if (opcao === "3") {
-        await enviarMensagem(numero, `⚠️ O reinício remoto do roteador ainda será adicionado.
+if (opcao === "4") {
+  await enviarMensagem(numero, `📶 A leitura detalhada dos aparelhos conectados será adicionada na próxima etapa.
 
 Um atendente dará continuidade por enquanto.`);
-        sessoes.set(numero, { etapa: "encerramento" });
-        iniciarEncerramento(numero);
-        return res.sendStatus(200);
-      }
+  sessoes.set(numero, { etapa: "encerramento" });
+  iniciarEncerramento(numero);
+  return res.sendStatus(200);
+}
 
-      await enviarMensagem(numero, `Certo. Um atendente dará continuidade ao atendimento.`);
-      sessoes.set(numero, { etapa: "encerramento" });
-      iniciarEncerramento(numero);
-      return res.sendStatus(200);
+await enviarMensagem(numero, `Certo. Um atendente dará continuidade ao atendimento.`);
+sessoes.set(numero, { etapa: "encerramento" });
+iniciarEncerramento(numero);
+return res.sendStatus(200);
     }
 
     if (sessao?.etapa === "selecionar_acesso_desconectado") {
