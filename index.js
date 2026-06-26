@@ -1424,15 +1424,21 @@ ${resultado.canal24Anterior} ➜ ${resultado.canal24Novo}
 
   }
 
-  sessoes.set(numero,{
-    etapa:"encerramento"
-  });
+  sessoes.set(numero, {
+  etapa: "confirmar_reinicio_pos_otimizacao",
+  cliente: sessao.cliente,
+  pppoe: sessao.pppoe
+});
 
-  iniciarEncerramento(numero);
+await enviarMensagem(numero, `🔄 Para aplicar completamente a otimização, recomendamos reiniciar o roteador agora.
 
-  return res.sendStatus(200);
+Deseja reiniciar agora?
 
-}
+1️⃣ Sim
+2️⃣ Depois eu reinicio`);
+
+return res.sendStatus(200);
+  }
 
   if (opcao === "2") {
     const ipCliente = sessao.pppoe?.ip;
@@ -1623,15 +1629,21 @@ ${resultado.canal24Anterior} ➜ ${resultado.canal24Novo}
 
   }
 
-  sessoes.set(numero,{
-    etapa:"encerramento"
-  });
+  sessoes.set(numero, {
+  etapa: "confirmar_reinicio_pos_otimizacao",
+  cliente: sessao.cliente,
+  pppoe: sessao.pppoe
+});
 
-  iniciarEncerramento(numero);
+await enviarMensagem(numero, `🔄 Para aplicar completamente a otimização, recomendamos reiniciar o roteador agora.
 
-  return res.sendStatus(200);
+Deseja reiniciar agora?
 
-}
+1️⃣ Sim
+2️⃣ Depois eu reinicio`);
+
+return res.sendStatus(200);
+      }
 
       if (opcao === "3") {
   const ipCliente = sessao.pppoe?.ip;
@@ -1703,7 +1715,95 @@ Responda apenas:
 4️⃣ Voltar ao menu`);
       return res.sendStatus(200);
     }
-    
+
+          if (sessao?.etapa === "confirmar_reinicio_pos_otimizacao") {
+
+  const opcao = String(texto || "").trim();
+
+  if (opcao === "1") {
+
+    const ipCliente = sessao.pppoe?.ip;
+
+    await enviarMensagem(
+      numero,
+      "🔄 Reiniciando seu roteador..."
+    );
+
+    try {
+
+      const resultado = await reiniciarRoteadorRemoto(ipCliente);
+
+      if (resultado.sucesso) {
+
+        await enviarMensagem(
+          numero,
+`✅ Roteador reiniciado com sucesso!
+
+⏳ Aguarde aproximadamente 2 minutos.
+
+Durante esse período a internet ficará indisponível.`
+        );
+
+      } else {
+
+        await enviarMensagem(numero, resultado.mensagem);
+
+      }
+
+    } catch (erro) {
+
+      console.error(erro);
+
+      await enviarMensagem(
+        numero,
+        "⚠️ Não foi possível reiniciar o roteador."
+      );
+
+    }
+
+    sessoes.set(numero,{
+      etapa:"encerramento"
+    });
+
+    iniciarEncerramento(numero);
+
+    return res.sendStatus(200);
+
+  }
+
+  if (opcao === "2") {
+
+    await enviarMensagem(
+      numero,
+`Perfeito.
+
+A otimização já foi aplicada.
+
+Recomendamos reiniciar o roteador mais tarde para garantir o melhor desempenho do Wi-Fi.`
+    );
+
+    sessoes.set(numero,{
+      etapa:"encerramento"
+    });
+
+    iniciarEncerramento(numero);
+
+    return res.sendStatus(200);
+
+  }
+
+  await enviarMensagem(
+    numero,
+`Escolha uma opção:
+
+1️⃣ Sim
+2️⃣ Depois eu reinicio`
+  );
+
+  return res.sendStatus(200);
+
+}
+          
     if (sessao?.etapa === "selecionar_acesso_desconectado") {
       if (audio) {
         await enviarMensagem(numero, `🎤 No momento ainda não consigo compreender mensagens de áudio.
