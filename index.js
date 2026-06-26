@@ -1377,7 +1377,7 @@ Um atendente dará continuidade por enquanto.`);
 
     await enviarMensagem(
       numero,
-      "🔄 Enviando comando de reinicialização do roteador..."
+      "🔄 Reiniciando seu roteador..."
     );
 
     try {
@@ -1386,9 +1386,9 @@ Um atendente dará continuidade por enquanto.`);
       if (resultado.sucesso) {
         await enviarMensagem(
           numero,
-`✅ Comando enviado com sucesso!
+`✅ Roteador reiniciado com sucesso!
 
-Seu roteador será reiniciado agora.
+Está Reiniciando.
 
 ⏳ Aguarde aproximadamente 2 minutos.
 
