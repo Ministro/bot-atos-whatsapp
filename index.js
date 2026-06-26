@@ -250,7 +250,20 @@ async function consultarDiagnosticoRemoto(ip) {
 }
 
 async function reiniciarRoteadorRemoto(ip) {
-  return await reiniciarRoteador(ip);
+  const response = await axios.post(
+    `${NAVIGATOR_API_URL}/reiniciar-roteador`,
+    { ip },
+    {
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${NAVIGATOR_API_TOKEN}`,
+        "ngrok-skip-browser-warning": "1"
+      },
+      timeout: 90000
+    }
+  );
+
+  return response.data;
 }
 
 async function enviarPdfBoleto(numero, base64Pdf, nomeArquivo = "boleto.pdf") {
