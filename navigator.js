@@ -294,6 +294,48 @@ async function alterarSenhaWifi(ip, banda, novaSenha) {
   };
 }
 
+async function reiniciarRoteador(ip) {
+  await loginNavigator(ip);
+
+  const body = new URLSearchParams({
+    postSecurityFlag: "65535"
+  });
+
+  const response = await axios.post(
+    `http://${ip}/boaform/admin/formReboot`,
+    body.toString(),
+    {
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+        Origin: `http://${ip}`,
+        Referer: `http://${ip}/reboot.asp`,
+        "User-Agent": "Mozilla/5.0"
+      },
+      timeout: 60000,
+      validateStatus: () => true
+    }
+  );
+
+  const texto = String(response.data || "").toLowerCase();
+
+  const sucesso =
+    response.status >= 200 &&
+    response.status < 400 &&
+    (
+      texto.includes("restarting") ||
+      texto.includes("rebooting") ||
+      texto.includes("configured and is rebooting")
+    );
+
+  return {
+    sucesso,
+    status: response.status,
+    mensagem: sucesso
+      ? "Comando de reinício enviado com sucesso."
+      : "Comando enviado, mas não consegui confirmar o reinício."
+  };
+}
+
 function montarMensagemDiagnostico(dados) {
   const total = Number(dados.totalDispositivos || 0);
 
@@ -330,5 +372,6 @@ module.exports = {
   diagnosticarNavigator,
   montarMensagemDiagnostico,
   montarMensagemAparelhosConectados,
-  alterarSenhaWifi
+  alterarSenhaWifi,
+  reiniciarRoteador
 };
