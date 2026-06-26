@@ -21,6 +21,9 @@ const IXC_USER = process.env.IXC_USER;
 const IXC_PASS = process.env.IXC_PASS;
 const OPA_TOKEN = process.env.OPA_TOKEN;
 
+const NAVIGATOR_API_URL = process.env.NAVIGATOR_API_URL || "https://quintuple-backwash-slacked.ngrok-free.dev";
+const NAVIGATOR_API_TOKEN = process.env.NAVIGATOR_API_TOKEN || "193746285";
+
 const sessoes = new Map();
 const timersEncerramento = new Map();
 
@@ -51,12 +54,12 @@ function pareceCpf(texto) {
 
 function respostaSim(texto) {
   const msg = String(texto || "").toLowerCase().trim();
-  return ["sim", "s", "ss", "correto", "isso", "positivo"].includes(msg);
+  return ["sim", "s", "ss", "correto", "isso", "positivo", "1"].includes(msg);
 }
 
 function respostaNao(texto) {
   const msg = String(texto || "").toLowerCase().trim();
-  return ["não", "nao", "n", "negativo", "errado"].includes(msg);
+  return ["não", "nao", "n", "negativo", "errado", "2"].includes(msg);
 }
 
 function contemFinanceiro(texto) {
@@ -67,6 +70,20 @@ function contemFinanceiro(texto) {
 function contemLentidao(texto) {
   const msg = String(texto || "").toLowerCase();
   return palavrasLentidao.some(p => msg.includes(p));
+}
+
+function contemTrocarSenhaWifi(texto) {
+  const msg = String(texto || "").toLowerCase();
+
+  return (
+    msg.includes("trocar senha") ||
+    msg.includes("mudar senha") ||
+    msg.includes("alterar senha") ||
+    msg.includes("senha do wifi") ||
+    msg.includes("senha do wi-fi") ||
+    msg.includes("senha wifi") ||
+    msg.includes("senha wi-fi")
+  );
 }
 
 function contemDespedida(texto) {
@@ -189,6 +206,44 @@ async function enviarMensagem(numero, texto) {
   );
 }
 
+async function trocarSenhaWifiRemoto(ip, banda, senha) {
+  const response = await axios.post(
+    `${NAVIGATOR_API_URL}/trocar-senha`,
+    {
+      ip,
+      banda,
+      senha
+    },
+    {
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${NAVIGATOR_API_TOKEN}`,
+        "ngrok-skip-browser-warning": "1"
+      },
+      timeout: 90000
+    }
+  );
+
+  return response.data;
+}
+
+async function consultarDiagnosticoRemoto(ip) {
+  const response = await axios.post(
+    `${NAVIGATOR_API_URL}/navigator`,
+    { ip },
+    {
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${NAVIGATOR_API_TOKEN}`,
+        "ngrok-skip-browser-warning": "1"
+      },
+      timeout: 90000
+    }
+  );
+
+  return response.data;
+}
+
 async function enviarPdfBoleto(numero, base64Pdf, nomeArquivo = "boleto.pdf") {
   const base64Limpo = String(base64Pdf || "").replace(/^data:application\/pdf;base64,/, "");
 
@@ -243,12 +298,10 @@ function estaNoPlantao() {
     })
   );
 
-  const dia = portoVelho.getDay(); // 0 = Domingo | 6 = Sábado
+  const dia = portoVelho.getDay();
   const hora = portoVelho.getHours();
   const minuto = portoVelho.getMinutes();
 
-  // ===== INÍCIO DO PLANTÃO =====
-  // Sábado às 12:00
   if (
     dia === 6 &&
     (hora > 12 || (hora === 12 && minuto >= 00))
@@ -256,8 +309,6 @@ function estaNoPlantao() {
     return true;
   }
 
-  // ===== FIM DO PLANTÃO =====
-  // Domingo até 16:00
   if (
     dia === 0 &&
     (
@@ -280,7 +331,7 @@ async function consultarBoletosPorCliente(idCliente) {
 
   const params = {
     qtype: "fn_areceber.id_cliente",
-query: String(idCliente),
+    query: String(idCliente),
     oper: "=",
     page: "1",
     rp: "20",
@@ -297,15 +348,15 @@ query: String(idCliente),
     `${IXC_URL}/fn_areceber`,
     params,
     {
-        headers: {
-            Authorization: `Basic ${auth}`,
-            "Content-Type": "application/json",
-            ixcsoft: "listar"
-        }
+      headers: {
+        Authorization: `Basic ${auth}`,
+        "Content-Type": "application/json",
+        ixcsoft: "listar"
+      }
     }
-);
+  );
 
-return response.data;
+  return response.data;
 }
 
 function escolherBoleto(registros) {
@@ -337,7 +388,7 @@ async function consultarDadosBoleto(idBoleto) {
     multa: "N",
     atualiza_boleto: "N",
     tipo_boleto: "arquivo",
-base64: "S"
+    base64: "S"
   };
 
   const response = await axios.post(
@@ -370,32 +421,32 @@ async function enviarBoletoOuPix(numero, sessao) {
 
   const dados = await consultarBoletosPorCliente(idCliente);
 
-const boleto = escolherBoleto(dados.registros || []);
+  const boleto = escolherBoleto(dados.registros || []);
 
-if (!boleto) {
-  await enviarMensagem(
-    numero,
-    "Não encontrei boletos em aberto para este contrato."
-  );
-  return;
-}
+  if (!boleto) {
+    await enviarMensagem(
+      numero,
+      "Não encontrei boletos em aberto para este contrato."
+    );
+    return;
+  }
 
-console.log("===== BOLETO ESCOLHIDO =====");
-console.log(JSON.stringify(boleto, null, 2));
-console.log("===== FIM BOLETO ESCOLHIDO =====");
+  console.log("===== BOLETO ESCOLHIDO =====");
+  console.log(JSON.stringify(boleto, null, 2));
+  console.log("===== FIM BOLETO ESCOLHIDO =====");
 
-const valor = String(boleto.valor_aberto || boleto.valor || "0.00").replace(".", ",");
-const vencimento = boleto.data_vencimento || "não informado";
-const linhaDigitavel = boleto.linha_digitavel || "";
-  
+  const valor = String(boleto.valor_aberto || boleto.valor || "0.00").replace(".", ",");
+  const vencimento = boleto.data_vencimento || "não informado";
+  const linhaDigitavel = boleto.linha_digitavel || "";
+
   const pdfBoleto = await consultarDadosBoleto(boleto.id);
 
-await enviarPdfBoleto(numero, pdfBoleto, `boleto-${boleto.id}.pdf`);
+  await enviarPdfBoleto(numero, pdfBoleto, `boleto-${boleto.id}.pdf`);
 
-if (linhaDigitavel) {
-  await enviarMensagem(
-    numero,
-    `💳 Fatura encontrada
+  if (linhaDigitavel) {
+    await enviarMensagem(
+      numero,
+      `💳 Fatura encontrada
 
 📅 Vencimento: ${vencimento}
 💰 Valor: R$ ${valor}
@@ -403,10 +454,10 @@ if (linhaDigitavel) {
 📄 Linha digitável:
 
 ${linhaDigitavel}`
-  );
-}
+    );
+  }
 
-return;
+  return;
 }
 
 function mensagemBoasVindas() {
@@ -456,9 +507,10 @@ ${endereco}
 
 Como posso ajudar?
 
-• Boleto para pagamento
-• Lentidão ou oscilação
-• Outro assunto`;
+1️⃣ Boleto para pagamento
+2️⃣ Lentidão ou oscilação
+3️⃣ Trocar senha do Wi-Fi
+4️⃣ Outro assunto`;
 }
 
 function mensagemOrientacaoConectado(cliente, pppoe) {
@@ -738,9 +790,9 @@ app.post("/opa/webhook", async (req, res) => {
     }
 
     if (!estaNoPlantao()) {
-    console.log("Fora do horário do plantão. OPA continuará o fluxo normal.");
-    return;
-}
+      console.log("Fora do horário do plantão. OPA continuará o fluxo normal.");
+      return;
+    }
 
     if (!payload?._id) {
       console.log("Evento sem ID de atendimento.");
@@ -748,7 +800,6 @@ app.post("/opa/webhook", async (req, res) => {
     }
 
     const atendimento = await buscarAtendimentoOPA(payload._id);
-    
     const cpf = atendimento.id_cliente?.cpf_cnpj;
 
     if (!cpf) {
@@ -782,11 +833,11 @@ app.get("/", (req, res) => {
 
 app.post("/webhook", async (req, res) => {
   try {
-        if (!estaNoPlantao()) {
+    if (!estaNoPlantao()) {
       console.log("Fora do horário do plantão. Webhook WhatsApp ignorado.");
       return res.sendStatus(200);
     }
-    
+
     const body = req.body;
     const data = body.data || body;
     const key = data.key || {};
@@ -794,10 +845,9 @@ app.post("/webhook", async (req, res) => {
 
     if (key.fromMe) return res.sendStatus(200);
 
-    // Ignora mensagens de grupos
-if (key.remoteJid?.endsWith("@g.us")) {
-  return res.sendStatus(200);
-}
+    if (key.remoteJid?.endsWith("@g.us")) {
+      return res.sendStatus(200);
+    }
 
     const numero = key.remoteJid?.replace("@s.whatsapp.net", "");
 
@@ -815,7 +865,7 @@ if (key.remoteJid?.endsWith("@g.us")) {
 
     const sessao = sessoes.get(numero);
 
-    if (sessao && contemDespedida(texto)) {
+      if (sessao && contemDespedida(texto)) {
       await responderDespedida(numero);
       return res.sendStatus(200);
     }
@@ -851,6 +901,298 @@ Exemplo:
       return res.sendStatus(200);
     }
 
+    if (sessao?.etapa === "confirmar_troca_senha_wifi_5g") {
+      if (audio) {
+        await enviarMensagem(numero, `🎤 No momento ainda não consigo compreender mensagens de áudio.
+
+Responda apenas:
+
+1️⃣ Sim
+2️⃣ Não`);
+        return res.sendStatus(200);
+      }
+
+      if (respostaNao(texto)) {
+        await enviarMensagem(numero, "Tudo bem. A senha do Wi-Fi não será alterada.");
+
+        sessoes.set(numero, { etapa: "encerramento" });
+        iniciarEncerramento(numero);
+        return res.sendStatus(200);
+      }
+
+      if (respostaSim(texto)) {
+        sessao.etapa = "aguardando_senha_wifi_5g";
+        sessoes.set(numero, sessao);
+
+        await enviarMensagem(numero, `🔐 Envie agora a nova senha da rede *5G*.
+
+⚠️ ATENÇÃO:
+A senha ficará exatamente como você enviar aqui.
+
+Ela deve ter no mínimo 8 caracteres.`);
+        return res.sendStatus(200);
+      }
+
+      await enviarMensagem(numero, `Não entendi.
+
+Deseja continuar com a alteração da senha do Wi-Fi?
+
+1️⃣ Sim
+2️⃣ Não`);
+      return res.sendStatus(200);
+    }
+
+    if (sessao?.etapa === "aguardando_senha_wifi_5g") {
+      if (audio) {
+        await enviarMensagem(numero, `🎤 No momento ainda não consigo compreender mensagens de áudio.
+
+Envie a nova senha da rede 5G por texto.`);
+        return res.sendStatus(200);
+      }
+
+      const novaSenha = String(texto || "").trim();
+
+      if (novaSenha.length < 8) {
+        await enviarMensagem(numero, `⚠️ A senha deve ter no mínimo 8 caracteres.
+
+Envie novamente a nova senha da rede 5G.`);
+        return res.sendStatus(200);
+      }
+
+      sessao.novaSenha5g = novaSenha;
+      sessao.etapa = "confirmar_senha_wifi_5g";
+      sessoes.set(numero, sessao);
+
+      await enviarMensagem(numero, `⚠️ CONFIRMAÇÃO
+
+A senha da rede *5G* será alterada para:
+
+${novaSenha}
+
+Confirma a alteração?
+
+1️⃣ Sim
+2️⃣ Não`);
+      return res.sendStatus(200);
+    }
+
+    if (sessao?.etapa === "confirmar_senha_wifi_5g") {
+      if (audio) {
+        await enviarMensagem(numero, `🎤 No momento ainda não consigo compreender mensagens de áudio.
+
+Responda apenas:
+
+1️⃣ Sim
+2️⃣ Não`);
+        return res.sendStatus(200);
+      }
+
+      if (respostaNao(texto)) {
+        sessao.etapa = "aguardando_senha_wifi_5g";
+        sessoes.set(numero, sessao);
+
+        await enviarMensagem(numero, `Tudo bem.
+
+Envie novamente a senha desejada para a rede *5G*.`);
+        return res.sendStatus(200);
+      }
+
+      if (!respostaSim(texto)) {
+        await enviarMensagem(numero, `Não entendi.
+
+Confirma a alteração da senha da rede 5G?
+
+1️⃣ Sim
+2️⃣ Não`);
+        return res.sendStatus(200);
+      }
+
+      const ipCliente = sessao.pppoe?.ip;
+
+      if (!ipCliente || ipCliente === "não informado") {
+        await enviarMensagem(numero, `⚠️ Não consegui identificar o IP do roteador para alterar a senha automaticamente.
+
+Um atendente dará continuidade.`);
+        sessoes.set(numero, { etapa: "encerramento" });
+        iniciarEncerramento(numero);
+        return res.sendStatus(200);
+      }
+
+      await enviarMensagem(numero, "🔄 Alterando a senha da rede 5G. Aguarde alguns segundos...");
+
+      try {
+        const resultado = await trocarSenhaWifiRemoto(ipCliente, "5g", sessao.novaSenha5g);
+
+        if (!resultado?.sucesso) {
+          throw new Error(resultado?.mensagem || "Não confirmou sucesso na troca da senha 5G");
+        }
+
+        sessao.etapa = "perguntar_alterar_senha_24g";
+        sessoes.set(numero, sessao);
+
+        await enviarMensagem(numero, `✅ Senha da rede *5G* alterada com sucesso!
+
+⚠️ Os aparelhos conectados na rede 5G podem desconectar.
+
+Deseja alterar também a senha da rede *2.4G*?
+
+1️⃣ Sim
+2️⃣ Não`);
+        return res.sendStatus(200);
+
+      } catch (erro) {
+        console.error("Erro ao trocar senha 5G:", erro.message);
+
+        await enviarMensagem(numero, `⚠️ Não consegui alterar a senha da rede 5G automaticamente agora.
+
+Um atendente dará continuidade.`);
+
+        sessoes.set(numero, { etapa: "encerramento" });
+        iniciarEncerramento(numero);
+        return res.sendStatus(200);
+      }
+    }
+
+    if (sessao?.etapa === "perguntar_alterar_senha_24g") {
+      if (audio) {
+        await enviarMensagem(numero, `🎤 No momento ainda não consigo compreender mensagens de áudio.
+
+Responda apenas:
+
+1️⃣ Sim
+2️⃣ Não`);
+        return res.sendStatus(200);
+      }
+
+      if (respostaNao(texto)) {
+        await enviarMensagem(numero, `✅ Alteração concluída.
+
+A senha da rede 5G já está ativa.
+
+Caso algum aparelho desconecte, conecte novamente usando a nova senha.`);
+
+        sessoes.set(numero, { etapa: "encerramento" });
+        iniciarEncerramento(numero);
+        return res.sendStatus(200);
+      }
+
+      if (respostaSim(texto)) {
+        sessao.etapa = "aguardando_senha_wifi_24g";
+        sessoes.set(numero, sessao);
+
+        await enviarMensagem(numero, `🔐 Envie agora a nova senha da rede *2.4G*.
+
+⚠️ ATENÇÃO:
+A senha ficará exatamente como você enviar aqui.
+
+Ela deve ter no mínimo 8 caracteres.`);
+        return res.sendStatus(200);
+      }
+
+      await enviarMensagem(numero, `Não entendi.
+
+Deseja alterar também a senha da rede 2.4G?
+
+1️⃣ Sim
+2️⃣ Não`);
+      return res.sendStatus(200);
+    }
+
+    if (sessao?.etapa === "aguardando_senha_wifi_24g") {
+      if (audio) {
+        await enviarMensagem(numero, `🎤 No momento ainda não consigo compreender mensagens de áudio.
+
+Envie a nova senha da rede 2.4G por texto.`);
+        return res.sendStatus(200);
+      }
+
+      const novaSenha = String(texto || "").trim();
+
+      if (novaSenha.length < 8) {
+        await enviarMensagem(numero, `⚠️ A senha deve ter no mínimo 8 caracteres.
+
+Envie novamente a nova senha da rede 2.4G.`);
+        return res.sendStatus(200);
+      }
+
+      sessao.novaSenha24g = novaSenha;
+      sessao.etapa = "confirmar_senha_wifi_24g";
+      sessoes.set(numero, sessao);
+
+      await enviarMensagem(numero, `⚠️ CONFIRMAÇÃO
+
+A senha da rede *2.4G* será alterada para:
+
+${novaSenha}
+
+Confirma a alteração?
+
+1️⃣ Sim
+2️⃣ Não`);
+      return res.sendStatus(200);
+    }
+
+      if (sessao?.etapa === "confirmar_senha_wifi_24g") {
+      if (audio) {
+        await enviarMensagem(numero, `🎤 No momento ainda não consigo compreender mensagens de áudio.
+
+Responda apenas:
+
+1️⃣ Sim
+2️⃣ Não`);
+        return res.sendStatus(200);
+      }
+
+      if (respostaNao(texto)) {
+        sessao.etapa = "aguardando_senha_wifi_24g";
+        sessoes.set(numero, sessao);
+
+        await enviarMensagem(numero, `Tudo bem.
+
+Envie novamente a senha desejada para a rede *2.4G*.`);
+        return res.sendStatus(200);
+      }
+
+      if (!respostaSim(texto)) {
+        await enviarMensagem(numero, `Não entendi.
+
+Confirma a alteração da senha da rede 2.4G?
+
+1️⃣ Sim
+2️⃣ Não`);
+        return res.sendStatus(200);
+      }
+
+      const ipCliente = sessao.pppoe?.ip;
+
+      await enviarMensagem(numero, "🔄 Alterando a senha da rede 2.4G. Aguarde alguns segundos...");
+
+      try {
+        const resultado = await trocarSenhaWifiRemoto(ipCliente, "24g", sessao.novaSenha24g);
+
+        if (!resultado?.sucesso) {
+          throw new Error(resultado?.mensagem || "Não confirmou sucesso na troca da senha 2.4G");
+        }
+
+        await enviarMensagem(numero, `✅ Senha da rede *2.4G* alterada com sucesso!
+
+✅ Alteração concluída.
+
+Caso algum aparelho desconecte, conecte novamente usando a nova senha.`);
+
+      } catch (erro) {
+        console.error("Erro ao trocar senha 2.4G:", erro.message);
+
+        await enviarMensagem(numero, `⚠️ Não consegui alterar a senha da rede 2.4G automaticamente agora.
+
+Um atendente dará continuidade.`);
+      }
+
+      sessoes.set(numero, { etapa: "encerramento" });
+      iniciarEncerramento(numero);
+      return res.sendStatus(200);
+    }
+
     if (sessao?.etapa === "cliente_conectado") {
       if (audio) {
         await enviarMensagem(numero, `🎤 No momento ainda não consigo compreender mensagens de áudio.
@@ -864,63 +1206,138 @@ Agradecemos pela compreensão.`);
         return res.sendStatus(200);
       }
 
-      if (contemFinanceiro(texto)) {
-  await enviarBoletoOuPix(numero, sessao);
-  return res.sendStatus(200);
-}
+      if (contemFinanceiro(texto) || String(texto || "").trim() === "1") {
+        await enviarBoletoOuPix(numero, sessao);
+        return res.sendStatus(200);
+      }
 
-      if (contemLentidao(texto)) {
-  const ipCliente = sessao.pppoe?.ip;
+      if (contemTrocarSenhaWifi(texto) || String(texto || "").trim() === "3") {
+        sessoes.set(numero, {
+          etapa: "confirmar_troca_senha_wifi_5g",
+          cliente: sessao.cliente,
+          pppoe: sessao.pppoe
+        });
 
-  if (!ipCliente || ipCliente === "não informado") {
-    await enviarMensagem(
-      numero,
-      mensagemOrientacaoConectado(sessao.cliente, sessao.pppoe)
-    );
+        await enviarMensagem(numero, `⚠️ ATENÇÃO
 
-    sessoes.set(numero, { etapa: "encerramento" });
-    iniciarEncerramento(numero);
-    return res.sendStatus(200);
-  }
+A senha será alterada exatamente como você enviar aqui.
 
-  await enviarMensagem(numero, "🔎 Aguarde, estou verificando seu roteador remotamente...");
+• Será alterada primeiro a rede 5G.
+• A senha deve ter no mínimo 8 caracteres.
+• Os aparelhos conectados podem desconectar e precisarão entrar novamente com a nova senha.
 
-  try {
-    const resposta = await axios.post(
-  "https://quintuple-backwash-slacked.ngrok-free.dev/navigator",
-  { ip: ipCliente },
-  {
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: "Bearer 193746285",
-      "ngrok-skip-browser-warning": "1"
-    }
-  }
-);
+Deseja continuar?
 
-const dados = resposta.data;
-const mensagemDiagnostico = montarMensagemDiagnostico(dados);
+1️⃣ Sim
+2️⃣ Não`);
+        return res.sendStatus(200);
+      }
 
-    await enviarMensagem(numero, mensagemDiagnostico);
-  } catch (erro) {
-    console.error("Erro no diagnóstico:", erro.message);
+      if (contemLentidao(texto) || String(texto || "").trim() === "2") {
+        const ipCliente = sessao.pppoe?.ip;
 
-    await enviarMensagem(
-      numero,
-      "⚠️ Não consegui acessar seu roteador automaticamente agora.\n\n" +
-      mensagemOrientacaoConectado(sessao.cliente, sessao.pppoe)
-    );
-  }
+        if (!ipCliente || ipCliente === "não informado") {
+          await enviarMensagem(
+            numero,
+            mensagemOrientacaoConectado(sessao.cliente, sessao.pppoe)
+          );
 
-  sessoes.set(numero, { etapa: "encerramento" });
-  iniciarEncerramento(numero);
-  return res.sendStatus(200);
-}
+          sessoes.set(numero, { etapa: "encerramento" });
+          iniciarEncerramento(numero);
+          return res.sendStatus(200);
+        }
+
+        await enviarMensagem(numero, "🔎 Aguarde, estou verificando seu roteador remotamente...");
+
+        try {
+          const dados = await consultarDiagnosticoRemoto(ipCliente);
+          const mensagemDiagnostico = montarMensagemDiagnostico(dados);
+
+          await enviarMensagem(numero, `${mensagemDiagnostico}
+
+O que deseja fazer agora?
+
+1️⃣ Trocar senha do Wi-Fi
+2️⃣ Otimizar canal Wi-Fi
+3️⃣ Reiniciar roteador
+4️⃣ Falar com atendente`);
+
+          sessoes.set(numero, {
+            etapa: "pos_diagnostico_lentidao",
+            cliente: sessao.cliente,
+            pppoe: sessao.pppoe,
+            diagnostico: dados
+          });
+
+        } catch (erro) {
+          console.error("Erro no diagnóstico:", erro.message);
+
+          await enviarMensagem(
+            numero,
+            "⚠️ Não consegui acessar seu roteador automaticamente agora.\n\n" +
+            mensagemOrientacaoConectado(sessao.cliente, sessao.pppoe)
+          );
+
+          sessoes.set(numero, { etapa: "encerramento" });
+          iniciarEncerramento(numero);
+        }
+
+        return res.sendStatus(200);
+      }
 
       await enviarMensagem(numero, `Entendido.
 
 Um atendente entrará em contato assim que possível ou no próximo dia útil para dar continuidade ao atendimento.`);
 
+      sessoes.set(numero, { etapa: "encerramento" });
+      iniciarEncerramento(numero);
+      return res.sendStatus(200);
+    }
+
+    if (sessao?.etapa === "pos_diagnostico_lentidao") {
+      const opcao = String(texto || "").trim();
+
+      if (opcao === "1" || contemTrocarSenhaWifi(texto)) {
+        sessoes.set(numero, {
+          etapa: "confirmar_troca_senha_wifi_5g",
+          cliente: sessao.cliente,
+          pppoe: sessao.pppoe
+        });
+
+        await enviarMensagem(numero, `⚠️ ATENÇÃO
+
+A senha será alterada exatamente como você enviar aqui.
+
+• Será alterada primeiro a rede 5G.
+• A senha deve ter no mínimo 8 caracteres.
+• Os aparelhos conectados podem desconectar e precisarão entrar novamente com a nova senha.
+
+Deseja continuar?
+
+1️⃣ Sim
+2️⃣ Não`);
+        return res.sendStatus(200);
+      }
+
+      if (opcao === "2") {
+        await enviarMensagem(numero, `⚠️ A otimização de canal Wi-Fi ainda será adicionada.
+
+Um atendente dará continuidade por enquanto.`);
+        sessoes.set(numero, { etapa: "encerramento" });
+        iniciarEncerramento(numero);
+        return res.sendStatus(200);
+      }
+
+      if (opcao === "3") {
+        await enviarMensagem(numero, `⚠️ O reinício remoto do roteador ainda será adicionado.
+
+Um atendente dará continuidade por enquanto.`);
+        sessoes.set(numero, { etapa: "encerramento" });
+        iniciarEncerramento(numero);
+        return res.sendStatus(200);
+      }
+
+      await enviarMensagem(numero, `Certo. Um atendente dará continuidade ao atendimento.`);
       sessoes.set(numero, { etapa: "encerramento" });
       iniciarEncerramento(numero);
       return res.sendStatus(200);
