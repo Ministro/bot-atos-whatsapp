@@ -35,12 +35,24 @@ async function loginNavigator(ip, usuario = "adminisp", senha = "adminisp") {
 async function diagnosticarNavigator(ip) {
   await loginNavigator(ip);
 
-  const [statusRes, ponRes, wifi24Res, wifi5Res] = await Promise.all([
-    axios.get(`http://${ip}/status.asp`, { timeout: 10000 }),
-    axios.get(`http://${ip}/status_pon.asp`, { timeout: 10000 }),
-    axios.get(`http://${ip}/boaform/formWlanRedirect?redirect-url=/status_wlan.asp&wlan_idx=1`, { timeout: 10000 }),
-    axios.get(`http://${ip}/boaform/formWlanRedirect?redirect-url=/status_wlan.asp&wlan_idx=0`, { timeout: 10000 })
-  ]);
+  const statusRes = await axios.get(`http://${ip}/status.asp`, { timeout: 10000 });
+
+const ponRes = await axios.get(`http://${ip}/status_pon.asp`, { timeout: 10000 });
+
+// Wi-Fi 2.4 GHz
+const wifi24Res = await axios.get(
+  `http://${ip}/boaform/formWlanRedirect?redirect-url=/status_wlan.asp&wlan_idx=1`,
+  { timeout: 10000 }
+);
+
+// pequena pausa para o roteador trocar o índice WLAN
+await new Promise(resolve => setTimeout(resolve, 800));
+
+// Wi-Fi 5 GHz
+const wifi5Res = await axios.get(
+  `http://${ip}/boaform/formWlanRedirect?redirect-url=/status_wlan.asp&wlan_idx=0`,
+  { timeout: 10000 }
+);
 
   const status = statusRes.data;
   const pon = ponRes.data;
