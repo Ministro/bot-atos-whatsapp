@@ -899,10 +899,9 @@ Agradecemos pela compreensão.`);
 );
 
 const dados = resposta.data;
-const mensagem = montarMensagemDiagnostico(dados);
-    const mensagem = montarMensagemDiagnostico(dados);
+const mensagemDiagnostico = montarMensagemDiagnostico(dados);
 
-    await enviarMensagem(numero, mensagem);
+    await enviarMensagem(numero, mensagemDiagnostico);
   } catch (erro) {
     console.error("Erro no diagnóstico:", erro.message);
 
