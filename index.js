@@ -886,7 +886,20 @@ Agradecemos pela compreensão.`);
   await enviarMensagem(numero, "🔎 Aguarde, estou verificando seu roteador remotamente...");
 
   try {
-    const dados = await diagnosticarNavigator(ipCliente);
+    const resposta = await axios.post(
+  "https://quintuple-backwash-slacked.ngrok-free.dev/navigator",
+  { ip: ipCliente },
+  {
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: "Bearer 193746285",
+      "ngrok-skip-browser-warning": "1"
+    }
+  }
+);
+
+const dados = resposta.data;
+const mensagem = montarMensagemDiagnostico(dados);
     const mensagem = montarMensagemDiagnostico(dados);
 
     await enviarMensagem(numero, mensagem);
