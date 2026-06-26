@@ -2,7 +2,11 @@ require("dotenv").config();
 
 const express = require("express");
 const axios = require("axios");
-const { diagnosticarNavigator, montarMensagemDiagnostico } = require("./navigator");
+const {
+  diagnosticarNavigator,
+  montarMensagemDiagnostico,
+  montarMensagemAparelhosConectados
+} = require("./navigator");
 
 const app = express();
 app.use(express.json({ limit: "20mb" }));
@@ -510,7 +514,8 @@ Como posso ajudar?
 1️⃣ Boleto para pagamento
 2️⃣ Lentidão ou oscilação
 3️⃣ Trocar senha do Wi-Fi
-4️⃣ Outro assunto`;
+4️⃣ Aparelhos conectados
+5️⃣ Outro assunto`;
 }
 
 function mensagemOrientacaoConectado(cliente, pppoe) {
@@ -1211,7 +1216,7 @@ Agradecemos pela compreensão.`);
         return res.sendStatus(200);
       }
 
-      if (contemTrocarSenhaWifi(texto) || String(texto || "").trim() === "3") {
+            if (contemTrocarSenhaWifi(texto) || String(texto || "").trim() === "3") {
         sessoes.set(numero, {
           etapa: "confirmar_troca_senha_wifi_5g",
           cliente: sessao.cliente,
@@ -1230,6 +1235,37 @@ Deseja continuar?
 
 1️⃣ Sim
 2️⃣ Não`);
+
+        return res.sendStatus(200);
+      }
+
+            if (String(texto || "").trim() === "4") {
+        const ipCliente = sessao.pppoe?.ip;
+
+        if (!ipCliente || ipCliente === "não informado") {
+          await enviarMensagem(numero, "⚠️ Não consegui identificar o IP do roteador para consultar os aparelhos conectados.");
+          return res.sendStatus(200);
+        }
+
+        await enviarMensagem(numero, "🔎 Consultando aparelhos conectados ao Wi-Fi...");
+
+        try {
+          const dados = await consultarDiagnosticoRemoto(ipCliente);
+          const mensagemAparelhos = montarMensagemAparelhosConectados(dados);
+
+          await enviarMensagem(numero, mensagemAparelhos);
+
+          sessoes.set(numero, {
+            etapa: "pos_aparelhos_conectados",
+            cliente: sessao.cliente,
+            pppoe: sessao.pppoe,
+            diagnostico: dados
+          });
+        } catch (erro) {
+          console.error("Erro ao consultar aparelhos:", erro.message);
+          await enviarMensagem(numero, "⚠️ Não consegui consultar os aparelhos conectados agora.");
+        }
+
         return res.sendStatus(200);
       }
 
@@ -1286,9 +1322,15 @@ O que deseja fazer agora?
         return res.sendStatus(200);
       }
 
-      await enviarMensagem(numero, `Entendido.
+      if (String(texto || "").trim() === "5") {
+  await enviarMensagem(numero, `Entendido.
 
 Um atendente entrará em contato assim que possível ou no próximo dia útil para dar continuidade ao atendimento.`);
+
+  sessoes.set(numero, { etapa: "encerramento" });
+  iniciarEncerramento(numero);
+  return res.sendStatus(200);
+}
 
       sessoes.set(numero, { etapa: "encerramento" });
       iniciarEncerramento(numero);
@@ -1353,6 +1395,63 @@ iniciarEncerramento(numero);
 return res.sendStatus(200);
     }
 
+        if (sessao?.etapa === "pos_aparelhos_conectados") {
+      const opcao = String(texto || "").trim();
+
+      if (opcao === "1") {
+        sessoes.set(numero, {
+          etapa: "confirmar_troca_senha_wifi_5g",
+          cliente: sessao.cliente,
+          pppoe: sessao.pppoe
+        });
+
+        await enviarMensagem(numero, `⚠️ ATENÇÃO
+
+A senha será alterada exatamente como você enviar aqui.
+
+• Será alterada primeiro a rede 5G.
+• A senha deve ter no mínimo 8 caracteres.
+• Os aparelhos conectados podem desconectar e precisarão entrar novamente com a nova senha.
+
+Deseja continuar?
+
+1️⃣ Sim
+2️⃣ Não`);
+        return res.sendStatus(200);
+      }
+
+      if (opcao === "2") {
+        await enviarMensagem(numero, "⚠️ A otimização de canal Wi-Fi ainda será adicionada.");
+        return res.sendStatus(200);
+      }
+
+      if (opcao === "3") {
+        await enviarMensagem(numero, "⚠️ O reinício remoto do roteador ainda será adicionado.");
+        return res.sendStatus(200);
+      }
+
+      if (opcao === "4") {
+        sessoes.set(numero, {
+          etapa: "cliente_conectado",
+          cliente: sessao.cliente,
+          pppoe: sessao.pppoe
+        });
+
+        await enviarMensagem(numero, montarRespostaConectado(sessao.cliente, sessao.pppoe));
+        return res.sendStatus(200);
+      }
+
+      await enviarMensagem(numero, `Opção inválida.
+
+Responda apenas:
+
+1️⃣ Trocar senha do Wi-Fi
+2️⃣ Otimizar canal do Wi-Fi
+3️⃣ Reiniciar roteador
+4️⃣ Voltar ao menu`);
+      return res.sendStatus(200);
+    }
+    
     if (sessao?.etapa === "selecionar_acesso_desconectado") {
       if (audio) {
         await enviarMensagem(numero, `🎤 No momento ainda não consigo compreender mensagens de áudio.
