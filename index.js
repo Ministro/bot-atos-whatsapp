@@ -250,8 +250,8 @@ function estaNoPlantao() {
   // ===== INÍCIO DO PLANTÃO =====
   // Sábado às 12:00
   if (
-    dia === 5 &&
-    (hora > 00 || (hora === 00 && minuto >= 00))
+    dia === 6 &&
+    (hora > 12 || (hora === 12 && minuto >= 00))
   ) {
     return true;
   }
