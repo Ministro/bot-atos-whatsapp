@@ -68,12 +68,11 @@ function extrairClientesWifi(html) {
 
     if (!dispositivos.find(d => d.mac === macNormalizado)) {
       dispositivos.push({
-        nome: "Aparelho conectado",
-        ip: "",
-        mac: macNormalizado,
-        rede: "",
-        txRate: ""
-      });
+    nome: "Aparelho conectado",
+    ip: "",
+    mac: macNormalizado,
+    rede: ""
+});
     }
   }
 
@@ -82,7 +81,7 @@ function extrairClientesWifi(html) {
 
 function formatarDispositivos(lista) {
   if (!lista || !lista.length) {
-    return "Nenhum aparelho conectado nessa rede.";
+    return "Nenhum aparelho conectado.";
   }
 
   return lista.map((d, i) => {
