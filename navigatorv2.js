@@ -19,15 +19,45 @@ function limparHtml(texto) {
 }
 
 function pegarVar(html, nome, indice = 0) {
-  const regex = new RegExp(`${nome}\\[${indice}\\]\\s*=\\s*['"]([^'"]*)['"]`, "i");
-  const match = String(html || "").match(regex);
-  return match ? match[1].trim() : "";
+  const texto = String(html || "");
+
+  const regexComIndice = new RegExp(
+    `${nome}\\s*\\[\\s*${indice}\\s*\\]\\s*=\\s*['"]([^'"]*)['"]`,
+    "i"
+  );
+
+  const matchComIndice = texto.match(regexComIndice);
+  if (matchComIndice) return matchComIndice[1].trim();
+
+  const regexSemIndice = new RegExp(
+    `${nome}\\s*=\\s*['"]([^'"]*)['"]`,
+    "i"
+  );
+
+  const matchSemIndice = texto.match(regexSemIndice);
+  return matchSemIndice ? matchSemIndice[1].trim() : "";
 }
 
 function pegarVarNumero(html, nome, indice = 0) {
-  const regex = new RegExp(`${nome}\\[${indice}\\]\\s*=\\s*([^;\\n]+)`, "i");
-  const match = String(html || "").match(regex);
-  return match ? String(match[1]).replace(/['"]/g, "").trim() : "";
+  const texto = String(html || "");
+
+  const regexComIndice = new RegExp(
+    `${nome}\\s*\\[\\s*${indice}\\s*\\]\\s*=\\s*([^;\\n]+)`,
+    "i"
+  );
+
+  const matchComIndice = texto.match(regexComIndice);
+  if (matchComIndice) {
+    return String(matchComIndice[1]).replace(/['"]/g, "").trim();
+  }
+
+  const regexSemIndice = new RegExp(
+    `${nome}\\s*=\\s*([^;\\n]+)`,
+    "i"
+  );
+
+  const matchSemIndice = texto.match(regexSemIndice);
+  return matchSemIndice ? String(matchSemIndice[1]).replace(/['"]/g, "").trim() : "";
 }
 
 function extrairClientesWifi(html) {
