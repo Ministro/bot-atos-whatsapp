@@ -148,8 +148,10 @@ async function loginNavigator(ip, usuario = "adminisp", senha = "adminisp") {
 }
 
 async function abrirWifi(ip, wlanIdx, pagina) {
+  const paginaReal = pagina === "status_wlan.asp" ? "wlstatus.asp" : pagina;
+
   const res = await axios.get(
-    `http://${ip}/boaform/formWlanRedirect?redirect-url=/${pagina}&wlan_idx=${wlanIdx}`,
+    `http://${ip}/boaform/formWlanRedirect?redirect-url=/${paginaReal}&wlan_idx=${wlanIdx}`,
     {
       timeout: 60000,
       validateStatus: () => true
@@ -283,10 +285,6 @@ async function alterarSenhaWifi(ip, banda, novaSenha) {
 
   const wlanIdx = banda === "5g" ? "0" : "1";
   await abrirWifi(ip, wlanIdx, "wlwpa.asp");
-
-  if (!ssidAtual) {
-  throw new Error(`Não consegui identificar o nome da rede ${is5g ? "5 GHz" : "2.4 GHz"} para alterar o canal.`);
-}
   
   const bodySemFlag = new URLSearchParams({
     wlanDisabled: "OFF",
