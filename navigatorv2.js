@@ -1,5 +1,7 @@
 const axios = require("axios");
 
+axios.defaults.insecureHTTPParser = true;
+
 function delay(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
