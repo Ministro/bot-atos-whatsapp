@@ -4,12 +4,6 @@ function delay(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-function pegarEntre(html, label) {
-  const regex = new RegExp(`<th[^>]*>${label}</th>\\s*<td[^>]*>([\\s\\S]*?)</td>`, "i");
-  const match = String(html || "").match(regex);
-  return match ? limparHtml(match[1]) : "";
-}
-
 function limparHtml(texto) {
   return String(texto || "")
     .replace(/<[^>]+>/g, "")
@@ -18,38 +12,42 @@ function limparHtml(texto) {
     .trim();
 }
 
+function pegarEntre(html, label) {
+  const regex = new RegExp(`<th[^>]*>${label}</th>\\s*<td[^>]*>([\\s\\S]*?)</td>`, "i");
+  const match = String(html || "").match(regex);
+  return match ? limparHtml(match[1]) : "";
+}
+
 function pegarVar(html, nome, indice = 0) {
-    html = String(html || "");
+  const texto = String(html || "");
 
-    const regex = new RegExp(
-        `${nome}\\s*\\[\\s*${indice}\\s*\\]\\s*=\\s*['"]([^'"]+)['"]`,
-        "i"
-    );
+  const regex = new RegExp(
+    `${nome}\\s*\\[\\s*${indice}\\s*\\]\\s*=\\s*['"]([^'"]*)['"]\\s*;`,
+    "i"
+  );
 
-    const match = html.match(regex);
-
-    if (match) {
-        return match[1].trim();
-    }
-
-    return "";
+  const match = texto.match(regex);
+  return match ? match[1].trim() : "";
 }
 
 function pegarVarNumero(html, nome, indice = 0) {
-    html = String(html || "");
+  const valor = pegarVar(html, nome, indice);
+  const numero = String(valor || "").match(/\d+/);
+  return numero ? numero[0] : "";
+}
 
-    const regex = new RegExp(
-        `${nome}\\s*\\[\\s*${indice}\\s*\\]\\s*=\\s*([0-9]+)`,
-        "i"
-    );
+function pegarInputValue(html, nome) {
+  const texto = String(html || "");
 
-    const match = html.match(regex);
+  const regex1 = new RegExp(`name=["']?${nome}["']?[^>]*value=["']([^"']*)["']`, "i");
+  const match1 = texto.match(regex1);
+  if (match1) return match1[1].trim();
 
-    if (match) {
-        return match[1];
-    }
+  const regex2 = new RegExp(`value=["']([^"']*)["'][^>]*name=["']?${nome}["']?`, "i");
+  const match2 = texto.match(regex2);
+  if (match2) return match2[1].trim();
 
-    return "";
+  return "";
 }
 
 function extrairClientesWifi(html) {
@@ -60,6 +58,13 @@ function extrairClientesWifi(html) {
 
   for (const mac of macs) {
     const macNormalizado = mac.toUpperCase();
+
+    if (
+      macNormalizado === "00:00:00:00:00:00" ||
+      macNormalizado === "FF:FF:FF:FF:FF:FF"
+    ) {
+      continue;
+    }
 
     if (!dispositivos.find(d => d.mac === macNormalizado)) {
       dispositivos.push({
@@ -144,7 +149,7 @@ async function loginNavigator(ip, usuario = "adminisp", senha = "adminisp") {
 
 async function abrirWifi(ip, wlanIdx, pagina) {
   await axios.get(
-    `http://${ip}/boaform/formWlanRedirect?redirect-url=/${pagina}&wlan_idx=${wlanIdx}`,
+    `http://${ip}/boaform/formWlanRedirect?redirect-url=/admin/${pagina}&wlan_idx=${wlanIdx}`,
     {
       timeout: 60000,
       validateStatus: () => true
@@ -153,7 +158,7 @@ async function abrirWifi(ip, wlanIdx, pagina) {
 
   await delay(700);
 
-  const res = await axios.get(`http://${ip}/admin/${pagina}`, {
+  const res = await axios.get(`http://${ip}/admin/${pagina}?_=${Date.now()}`, {
     timeout: 60000,
     validateStatus: () => true
   });
@@ -163,7 +168,7 @@ async function abrirWifi(ip, wlanIdx, pagina) {
 
 async function abrirClientesWifi(ip, wlanIdx) {
   const res = await axios.get(
-    `http://${ip}/boaform/admin/formWirelessTbl?submit-url=/admin/wlstatbl.asp&wlan_idx=${wlanIdx}`,
+    `http://${ip}/boaform/admin/formWirelessTbl?submit-url=/admin/wlstatbl.asp&wlan_idx=${wlanIdx}&_=${Date.now()}`,
     {
       timeout: 60000,
       validateStatus: () => true
@@ -173,25 +178,20 @@ async function abrirClientesWifi(ip, wlanIdx) {
   return String(res.data || "");
 }
 
-function pegarInputValue(html, nome) {
-  const texto = String(html || "");
-
-  const regex1 = new RegExp(`name=["']?${nome}["']?[^>]*value=["']([^"']*)["']`, "i");
-  const match1 = texto.match(regex1);
-  if (match1) return match1[1].trim();
-
-  const regex2 = new RegExp(`value=["']([^"']*)["'][^>]*name=["']?${nome}["']?`, "i");
-  const match2 = texto.match(regex2);
-  if (match2) return match2[1].trim();
-
-  return "";
-}
-
 function extrairSsidBasic(html) {
   return (
     pegarInputValue(html, "ssid") ||
+    pegarVar(html, "ssid_drv") ||
     pegarVar(html, "ssid_5g") ||
     pegarVar(html, "ssid_2g") ||
+    ""
+  );
+}
+
+function extrairCanalStatus(html) {
+  return (
+    pegarVarNumero(html, "channel_drv") ||
+    pegarVar(html, "channel_drv") ||
     ""
   );
 }
@@ -207,44 +207,43 @@ function extrairCanalBasic(html) {
 async function diagnosticarNavigator(ip) {
   await loginNavigator(ip);
 
-  const statusRes = await axios.get(`http://${ip}/status.asp`, {
+  const statusRes = await axios.get(`http://${ip}/status.asp?_=${Date.now()}`, {
     timeout: 60000,
     validateStatus: () => true
   });
 
-  const ponRes = await axios.get(`http://${ip}/status_pon.asp`, {
+  const ponRes = await axios.get(`http://${ip}/status_pon.asp?_=${Date.now()}`, {
     timeout: 60000,
     validateStatus: () => true
   });
 
-  const wifi24 = await abrirWifi(ip, "1", "status_wlan.asp");
   const wifi5 = await abrirWifi(ip, "0", "status_wlan.asp");
-
-  const basic24 = await abrirWifi(ip, "1", "wlbasic.asp");
   const basic5 = await abrirWifi(ip, "0", "wlbasic.asp");
-
-  const clientesHtml24 = await abrirClientesWifi(ip, "1");
   const clientesHtml5 = await abrirClientesWifi(ip, "0");
 
-  const clientes24 = extrairClientesWifi(clientesHtml24).map(d => ({
-    ...d,
-    rede: "2.4 GHz"
-  }));
+  const wifi24 = await abrirWifi(ip, "1", "status_wlan.asp");
+  const basic24 = await abrirWifi(ip, "1", "wlbasic.asp");
+  const clientesHtml24 = await abrirClientesWifi(ip, "1");
 
   const clientes5 = extrairClientesWifi(clientesHtml5).map(d => ({
     ...d,
     rede: "5 GHz"
   }));
 
-  const qtd24 =
-    pegarVar(wifi24, "clientnum") ||
-    pegarVarNumero(wifi24, "clientnum") ||
-    String(clientes24.length);
+  const clientes24 = extrairClientesWifi(clientesHtml24).map(d => ({
+    ...d,
+    rede: "2.4 GHz"
+  }));
 
   const qtd5 =
     pegarVar(wifi5, "clientnum") ||
     pegarVarNumero(wifi5, "clientnum") ||
     String(clientes5.length);
+
+  const qtd24 =
+    pegarVar(wifi24, "clientnum") ||
+    pegarVarNumero(wifi24, "clientnum") ||
+    String(clientes24.length);
 
   return {
     equipamento: {
@@ -266,27 +265,21 @@ async function diagnosticarNavigator(ip) {
       onuState: pegarEntre(ponRes.data, "ONU State"),
       onuId: pegarEntre(ponRes.data, "ONU ID")
     },
-    wifi24: {
-      ssid: pegarVar(wifi24, "ssid_drv") || extrairSsidBasic(basic24),
-      canal:
-    pegarVarNumero(wifi24, "channel_drv") ||
-    pegarVar(wifi24, "channel_drv") ||
-    extrairCanalBasic(basic24),
-      criptografia: pegarVar(wifi24, "wep"),
-      bssid: pegarVar(wifi24, "bssid_drv"),
-      clientes: qtd24,
-      dispositivos: clientes24
-    },
     wifi5: {
       ssid: pegarVar(wifi5, "ssid_drv") || extrairSsidBasic(basic5),
-      canal:
-    pegarVarNumero(wifi5, "channel_drv") ||
-    pegarVar(wifi5, "channel_drv") ||
-    extrairCanalBasic(basic5),
+      canal: extrairCanalStatus(wifi5) || extrairCanalBasic(basic5),
       criptografia: pegarVar(wifi5, "wep"),
       bssid: pegarVar(wifi5, "bssid_drv"),
       clientes: qtd5,
       dispositivos: clientes5
+    },
+    wifi24: {
+      ssid: pegarVar(wifi24, "ssid_drv") || extrairSsidBasic(basic24),
+      canal: extrairCanalStatus(wifi24) || extrairCanalBasic(basic24),
+      criptografia: pegarVar(wifi24, "wep"),
+      bssid: pegarVar(wifi24, "bssid_drv"),
+      clientes: qtd24,
+      dispositivos: clientes24
     },
     totalDispositivos: Number(qtd24 || 0) + Number(qtd5 || 0)
   };
@@ -298,6 +291,10 @@ async function alterarSenhaWifi(ip, banda, novaSenha) {
   const wlanIdx = banda === "5g" ? "0" : "1";
   await abrirWifi(ip, wlanIdx, "wlwpa.asp");
 
+  if (!ssidAtual) {
+  throw new Error(`Não consegui identificar o nome da rede ${is5g ? "5 GHz" : "2.4 GHz"} para alterar o canal.`);
+}
+  
   const bodySemFlag = new URLSearchParams({
     wlanDisabled: "OFF",
     isNmode: "1",
@@ -351,7 +348,10 @@ async function alterarSenhaWifi(ip, banda, novaSenha) {
   );
 
   const texto = String(response.data || "").toLowerCase();
-  const sucesso = response.status >= 200 && response.status < 400 && texto.includes("change setting successfully");
+  const sucesso =
+    response.status >= 200 &&
+    response.status < 400 &&
+    texto.includes("change setting successfully");
 
   return {
     sucesso,
@@ -385,19 +385,28 @@ async function alterarCanalWifi(ip, banda, novoCanal) {
   await loginNavigator(ip);
 
   const wlanIdx = banda === "5g" ? "0" : "1";
+  const status = await abrirWifi(ip, wlanIdx, "status_wlan.asp");
   const pagina = await abrirWifi(ip, wlanIdx, "wlbasic.asp");
 
-  const ssidAtual = pegarVar(pagina, "ssid_drv") || pegarVar(pagina, "ssid_5g") || pegarVar(pagina, "ssid_2g") || "";
-  const canalAtual = pegarVar(pagina, "channel_drv") || pegarVarNumero(pagina, "defaultChan") || "";
+  const ssidAtual =
+    pegarVar(status, "ssid_drv") ||
+    pegarInputValue(pagina, "ssid") ||
+    "";
+
+  const canalAtual =
+    extrairCanalStatus(status) ||
+    pegarInputValue(pagina, "chan") ||
+    "";
 
   const is5g = banda === "5g";
-
-  const canalEscolhido = novoCanal || (is5g ? escolherProximoCanal5(canalAtual) : escolherProximoCanal24(canalAtual));
+  const canalEscolhido =
+    novoCanal ||
+    (is5g ? escolherProximoCanal5(canalAtual) : escolherProximoCanal24(canalAtual));
 
   const bodySemFlag = new URLSearchParams({
     band: is5g ? "75" : "10",
     mode: "0",
-    ssid: ssidAtual || (is5g ? "ATOS TELECOM-5G" : "ATOS TELECOM _2.4G"),
+    ssid: ssidAtual,
     chanwid: is5g ? "2" : "0",
     chan: canalEscolhido,
     txpower: "0",
@@ -436,7 +445,10 @@ async function alterarCanalWifi(ip, banda, novoCanal) {
   );
 
   const texto = String(response.data || "").toLowerCase();
-  const sucesso = response.status >= 200 && response.status < 400 && texto.includes("change setting successfully");
+  const sucesso =
+    response.status >= 200 &&
+    response.status < 400 &&
+    texto.includes("change setting successfully");
 
   return {
     sucesso,
@@ -458,6 +470,10 @@ async function otimizarCanal(ip) {
 
   return {
     sucesso,
+    canal5gAnterior: r5.canalAnterior,
+    canal5gNovo: r5.canalNovo,
+    canal24Anterior: r24.canalAnterior,
+    canal24Novo: r24.canalNovo,
     resultados: [r5, r24],
     mensagem: sucesso
       ? `CANAIS OTIMIZADOS COM SUCESSO
