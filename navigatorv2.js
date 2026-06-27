@@ -172,6 +172,49 @@ async function abrirWifi(ip, wlanIdx, pagina) {
   return String(res.data || "");
 }
 
+async function abrirClientesWifi(ip, wlanIdx) {
+  const res = await axios.get(
+    `http://${ip}/boaform/admin/formWirelessTbl?submit-url=/admin/wlstatbl.asp&wlan_idx=${wlanIdx}`,
+    {
+      timeout: 60000,
+      validateStatus: () => true
+    }
+  );
+
+  return String(res.data || "");
+}
+
+function pegarInputValue(html, nome) {
+  const texto = String(html || "");
+
+  const regex1 = new RegExp(`name=["']?${nome}["']?[^>]*value=["']([^"']*)["']`, "i");
+  const match1 = texto.match(regex1);
+  if (match1) return match1[1].trim();
+
+  const regex2 = new RegExp(`value=["']([^"']*)["'][^>]*name=["']?${nome}["']?`, "i");
+  const match2 = texto.match(regex2);
+  if (match2) return match2[1].trim();
+
+  return "";
+}
+
+function extrairSsidBasic(html) {
+  return (
+    pegarInputValue(html, "ssid") ||
+    pegarVar(html, "ssid_5g") ||
+    pegarVar(html, "ssid_2g") ||
+    ""
+  );
+}
+
+function extrairCanalBasic(html) {
+  return (
+    pegarInputValue(html, "chan") ||
+    pegarVarNumero(html, "defaultChan") ||
+    ""
+  );
+}
+
 async function diagnosticarNavigator(ip) {
   await loginNavigator(ip);
 
@@ -188,11 +231,31 @@ async function diagnosticarNavigator(ip) {
   const wifi24 = await abrirWifi(ip, "1", "status_wlan.asp");
   const wifi5 = await abrirWifi(ip, "0", "status_wlan.asp");
 
-  const clientes24 = extrairClientesWifi(wifi24);
-  const clientes5 = extrairClientesWifi(wifi5);
+  const basic24 = await abrirWifi(ip, "1", "wlbasic.asp");
+  const basic5 = await abrirWifi(ip, "0", "wlbasic.asp");
 
-  const qtd24 = pegarVar(wifi24, "clientnum") || pegarVarNumero(wifi24, "clientnum") || String(clientes24.length);
-  const qtd5 = pegarVar(wifi5, "clientnum") || pegarVarNumero(wifi5, "clientnum") || String(clientes5.length);
+  const clientesHtml24 = await abrirClientesWifi(ip, "1");
+  const clientesHtml5 = await abrirClientesWifi(ip, "0");
+
+  const clientes24 = extrairClientesWifi(clientesHtml24).map(d => ({
+    ...d,
+    rede: "2.4 GHz"
+  }));
+
+  const clientes5 = extrairClientesWifi(clientesHtml5).map(d => ({
+    ...d,
+    rede: "5 GHz"
+  }));
+
+  const qtd24 =
+    pegarVar(wifi24, "clientnum") ||
+    pegarVarNumero(wifi24, "clientnum") ||
+    String(clientes24.length);
+
+  const qtd5 =
+    pegarVar(wifi5, "clientnum") ||
+    pegarVarNumero(wifi5, "clientnum") ||
+    String(clientes5.length);
 
   return {
     equipamento: {
@@ -215,16 +278,16 @@ async function diagnosticarNavigator(ip) {
       onuId: pegarEntre(ponRes.data, "ONU ID")
     },
     wifi24: {
-      ssid: pegarVar(wifi24, "ssid_drv"),
-      canal: pegarVar(wifi24, "channel_drv"),
+      ssid: pegarVar(wifi24, "ssid_drv") || extrairSsidBasic(basic24),
+      canal: pegarVar(wifi24, "channel_drv") || extrairCanalBasic(basic24),
       criptografia: pegarVar(wifi24, "wep"),
       bssid: pegarVar(wifi24, "bssid_drv"),
       clientes: qtd24,
       dispositivos: clientes24
     },
     wifi5: {
-      ssid: pegarVar(wifi5, "ssid_drv"),
-      canal: pegarVar(wifi5, "channel_drv"),
+      ssid: pegarVar(wifi5, "ssid_drv") || extrairSsidBasic(basic5),
+      canal: pegarVar(wifi5, "channel_drv") || extrairCanalBasic(basic5),
       criptografia: pegarVar(wifi5, "wep"),
       bssid: pegarVar(wifi5, "bssid_drv"),
       clientes: qtd5,
