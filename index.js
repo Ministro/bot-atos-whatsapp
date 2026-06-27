@@ -1331,7 +1331,7 @@ O que deseja fazer agora?
 2️⃣ Reiniciar roteador
 3️⃣ Trocar senha do Wi-Fi
 4️⃣ Ver aparelhos conectados
-5️⃣ Falar com atendente`);
+5️⃣ Encerrar`);
 
           sessoes.set(numero, {
             etapa: "pos_diagnostico_lentidao",
@@ -1528,18 +1528,16 @@ Deseja continuar?
   }
 
   if (opcao === "5") {
-    await enviarMensagem(numero, `Entendido.
+    await enviarMensagem(numero, `✅ Atendimento encerrado.
 
-Um atendente dará continuidade ao atendimento.`);
+A ATOS TELECOM agradece o seu contato.
 
-    sessoes.set(numero, {
-      etapa: "encerramento"
-    });
+Sempre que precisar, estaremos à disposição. 💙`);
 
-    iniciarEncerramento(numero);
+    sessoes.delete(numero);
 
     return res.sendStatus(200);
-  }
+}
 
   await enviarMensagem(numero, `Opção inválida.
 
@@ -1549,7 +1547,7 @@ Responda apenas:
 2️⃣ Reiniciar roteador
 3️⃣ Trocar senha do Wi-Fi
 4️⃣ Ver aparelhos conectados
-5️⃣ Falar com atendente`);
+5️⃣ Encerrar`);
 
   return res.sendStatus(200);
 }
