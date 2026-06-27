@@ -148,24 +148,13 @@ async function loginNavigator(ip, usuario = "adminisp", senha = "adminisp") {
 }
 
 async function abrirWifi(ip, wlanIdx, pagina) {
-  await axios.get(
+  const res = await axios.get(
     `http://${ip}/boaform/formWlanRedirect?redirect-url=/${pagina}&wlan_idx=${wlanIdx}`,
     {
       timeout: 60000,
       validateStatus: () => true
     }
   );
-
-  await delay(1000);
-
-  const res = await axios.get(`http://${ip}/admin/${pagina}?_=${Date.now()}`, {
-    timeout: 60000,
-    validateStatus: () => true,
-    headers: {
-      "User-Agent": "Mozilla/5.0",
-      Referer: `http://${ip}/admin/${pagina}`
-    }
-  });
 
   return String(res.data || "");
 }
