@@ -1,5 +1,7 @@
 const axios = require("axios");
 
+axios.defaults.insecureHTTPParser = true;
+
 function pegarEntre(html, label) {
   const regex = new RegExp(`<th[^>]*>${label}</th>\\s*<td[^>]*>([\\s\\S]*?)</td>`, "i");
   const match = html.match(regex);
