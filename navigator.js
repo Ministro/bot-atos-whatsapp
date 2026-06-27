@@ -1,5 +1,11 @@
-const axios = require("axios");
+const http = require("http");
 
+const httpAgent = new http.Agent({
+  keepAlive: false,
+  insecureHTTPParser: true
+});
+
+axios.defaults.httpAgent = httpAgent;
 axios.defaults.insecureHTTPParser = true;
 
 function pegarEntre(html, label) {
