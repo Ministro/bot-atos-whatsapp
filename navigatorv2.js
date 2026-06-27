@@ -19,45 +19,37 @@ function limparHtml(texto) {
 }
 
 function pegarVar(html, nome, indice = 0) {
-  const texto = String(html || "");
+    html = String(html || "");
 
-  const regexComIndice = new RegExp(
-    `${nome}\\s*\\[\\s*${indice}\\s*\\]\\s*=\\s*['"]([^'"]*)['"]`,
-    "i"
-  );
+    const regex = new RegExp(
+        `${nome}\\s*\\[\\s*${indice}\\s*\\]\\s*=\\s*['"]([^'"]+)['"]`,
+        "i"
+    );
 
-  const matchComIndice = texto.match(regexComIndice);
-  if (matchComIndice) return matchComIndice[1].trim();
+    const match = html.match(regex);
 
-  const regexSemIndice = new RegExp(
-    `${nome}\\s*=\\s*['"]([^'"]*)['"]`,
-    "i"
-  );
+    if (match) {
+        return match[1].trim();
+    }
 
-  const matchSemIndice = texto.match(regexSemIndice);
-  return matchSemIndice ? matchSemIndice[1].trim() : "";
+    return "";
 }
 
 function pegarVarNumero(html, nome, indice = 0) {
-  const texto = String(html || "");
+    html = String(html || "");
 
-  const regexComIndice = new RegExp(
-    `${nome}\\s*\\[\\s*${indice}\\s*\\]\\s*=\\s*([^;\\n]+)`,
-    "i"
-  );
+    const regex = new RegExp(
+        `${nome}\\s*\\[\\s*${indice}\\s*\\]\\s*=\\s*([0-9]+)`,
+        "i"
+    );
 
-  const matchComIndice = texto.match(regexComIndice);
-  if (matchComIndice) {
-    return String(matchComIndice[1]).replace(/['"]/g, "").trim();
-  }
+    const match = html.match(regex);
 
-  const regexSemIndice = new RegExp(
-    `${nome}\\s*=\\s*([^;\\n]+)`,
-    "i"
-  );
+    if (match) {
+        return match[1];
+    }
 
-  const matchSemIndice = texto.match(regexSemIndice);
-  return matchSemIndice ? String(matchSemIndice[1]).replace(/['"]/g, "").trim() : "";
+    return "";
 }
 
 function extrairClientesWifi(html) {
@@ -89,11 +81,8 @@ function formatarDispositivos(lista) {
   }
 
   return lista.map((d, i) => {
-    return `${i + 1}. ${d.nome || "Aparelho"}
-• MAC: ${d.mac || "Não informado"}
-• IP: ${d.ip || "Não informado"}
-• Rede: ${d.rede || "Não informado"}
-• Taxa da Conexão: ${d.txRate || "0"} Mbps`;
+    return `📱 Aparelho ${i + 1}
+🔗 MAC: ${d.mac || "Não informado"}`;
   }).join("\n\n");
 }
 
@@ -279,7 +268,10 @@ async function diagnosticarNavigator(ip) {
     },
     wifi24: {
       ssid: pegarVar(wifi24, "ssid_drv") || extrairSsidBasic(basic24),
-      canal: pegarVar(wifi24, "channel_drv") || extrairCanalBasic(basic24),
+      canal:
+    pegarVarNumero(wifi24, "channel_drv") ||
+    pegarVar(wifi24, "channel_drv") ||
+    extrairCanalBasic(basic24),
       criptografia: pegarVar(wifi24, "wep"),
       bssid: pegarVar(wifi24, "bssid_drv"),
       clientes: qtd24,
@@ -287,7 +279,10 @@ async function diagnosticarNavigator(ip) {
     },
     wifi5: {
       ssid: pegarVar(wifi5, "ssid_drv") || extrairSsidBasic(basic5),
-      canal: pegarVar(wifi5, "channel_drv") || extrairCanalBasic(basic5),
+      canal:
+    pegarVarNumero(wifi5, "channel_drv") ||
+    pegarVar(wifi5, "channel_drv") ||
+    extrairCanalBasic(basic5),
       criptografia: pegarVar(wifi5, "wep"),
       bssid: pegarVar(wifi5, "bssid_drv"),
       clientes: qtd5,
