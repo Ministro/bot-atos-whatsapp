@@ -350,8 +350,8 @@ function estaNoPlantao() {
   if (
     dia === 0 &&
     (
-      hora < 16 ||
-      (hora === 16 && minuto <= 0)
+      hora < 9 ||
+      (hora === 9 && minuto <= 0)
     )
   ) {
     return true;
