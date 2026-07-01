@@ -31,6 +31,9 @@ const NAVIGATOR_API_TOKEN = process.env.NAVIGATOR_API_TOKEN || "193746285";
 const sessoes = new Map();
 const timersEncerramento = new Map();
 
+// Guarda o último CPF que cada número enviou no chat, para o comando manual /boleto
+const cpfsCapturados = new Map();
+
 const palavrasDespedida = [
   "obrigado", "obrigada", "obg", "valeu", "vlw", "ok",
   "tá bom", "ta bom", "beleza", "blz", "certo",
@@ -498,6 +501,28 @@ ${linhaDigitavel}`
   return;
 }
 
+// ===================== NOVO: comando manual /boleto =====================
+// Usa o CPF passado junto no comando (/boleto 12345678900) ou, se não vier
+// nenhum, usa o último CPF que o próprio cliente digitou naquele chat.
+async function processarComandoBoleto(numero, cpfLimpo) {
+  try {
+    const dadosCpf = await consultarCpf(cpfLimpo);
+
+    if (dadosCpf.erro || dadosCpf.aviso || !dadosCpf.cliente) {
+      await enviarMensagem(numero, `⚠️ Não localizei cadastro para o CPF ${cpfLimpo}.`);
+      return;
+    }
+
+    await enviarBoletoOuPix(numero, { cliente: dadosCpf.cliente });
+
+    cpfsCapturados.delete(numero);
+  } catch (erro) {
+    console.error("Erro ao processar comando /boleto:", erro.response?.data || erro.message);
+    await enviarMensagem(numero, "⚠️ Não consegui localizar/enviar o boleto agora.");
+  }
+}
+// ==========================================================================
+
 function mensagemBoasVindas() {
   return `👋 Olá! Seja bem-vindo ao atendimento de plantão da ATOS TELECOM.
 
@@ -872,17 +897,10 @@ app.get("/", (req, res) => {
 
 app.post("/webhook", async (req, res) => {
   try {
-    if (!estaNoPlantao()) {
-      console.log("Fora do horário do plantão. Webhook WhatsApp ignorado.");
-      return res.sendStatus(200);
-    }
-
     const body = req.body;
     const data = body.data || body;
     const key = data.key || {};
     const message = data.message || {};
-
-    if (key.fromMe) return res.sendStatus(200);
 
     if (key.remoteJid?.endsWith("@g.us")) {
       return res.sendStatus(200);
@@ -890,15 +908,61 @@ app.post("/webhook", async (req, res) => {
 
     const numero = key.remoteJid?.replace("@s.whatsapp.net", "");
 
+    if (!numero) return res.sendStatus(200);
+
     const texto =
       message.conversation ||
       message.extendedTextMessage?.text ||
       data.text ||
       "";
 
-    const audio = ehAudio(message, data);
+    // ===================================================================
+    // NOVO: comando manual do administrador. Funciona a QUALQUER hora,
+    // independente do plantão, porque é tratado antes do bloqueio abaixo.
+    // Digite na própria conversa do cliente:
+    //   /boleto            -> usa o último CPF que o cliente mandou
+    //   /boleto 12345678900 -> usa o CPF informado no próprio comando
+    // ===================================================================
+    if (key.fromMe) {
+      const comandoTexto = String(texto || "").trim();
+      const matchComando = comandoTexto.match(/^\/boleto(?:\s+([\d.\-]+))?$/i);
 
-    if (!numero) return res.sendStatus(200);
+      if (matchComando) {
+        const cpfDoArgumento = matchComando[1] ? limparCpf(matchComando[1]) : null;
+        const cpfValido = cpfDoArgumento && cpfDoArgumento.length === 11
+          ? cpfDoArgumento
+          : cpfsCapturados.get(numero);
+
+        if (!cpfValido) {
+          await enviarMensagem(numero, `⚠️ Não tenho nenhum CPF salvo para este número ainda.
+
+Use: /boleto 12345678900`);
+          return res.sendStatus(200);
+        }
+
+        await processarComandoBoleto(numero, cpfValido);
+      }
+
+      return res.sendStatus(200);
+    }
+
+    // Captura passiva: se o cliente digitar um CPF em qualquer momento,
+    // guardamos para o comando /boleto poder usar depois.
+    if (pareceCpf(texto)) {
+      cpfsCapturados.set(numero, limparCpf(texto));
+    }
+
+    // ===================================================================
+    // A partir daqui segue o fluxo ORIGINAL, que só funciona no plantão.
+    // ===================================================================
+    if (!estaNoPlantao()) {
+      console.log("Fora do horário do plantão. Webhook WhatsApp ignorado.");
+      return res.sendStatus(200);
+    }
+
+    const message2 = message; // mantém compatibilidade com o restante do código abaixo
+
+    const audio = ehAudio(message, data);
 
     console.log("Mensagem recebida:", numero, texto || "[sem texto]", audio ? "[áudio]" : "");
 
