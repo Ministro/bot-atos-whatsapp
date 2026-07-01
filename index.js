@@ -478,7 +478,7 @@ async function enviarBoletoOuPix(numero, sessao) {
 
   const valor = String(boleto.valor_aberto || boleto.valor || "0.00").replace(".", ",");
   const vencimento = boleto.data_vencimento || "não informado";
-  const linhaDigitavel = boleto.linha_digitavel || "";
+  const linhaDigitavel = String(boleto.linha_digitavel || "").replace(/\D/g, "");
 
   const pdfBoleto = await consultarDadosBoleto(boleto.id);
 
