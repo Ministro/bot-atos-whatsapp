@@ -486,16 +486,16 @@ async function enviarBoletoOuPix(numero, sessao) {
 
   if (linhaDigitavel) {
     await enviarMensagem(
-      numero,
-      `💳 Fatura encontrada
+  numero,
+  `💳 Fatura encontrada
 
 📅 Vencimento: ${vencimento}
 💰 Valor: R$ ${valor}
 
-📄 Linha digitável:
+📄Linha digitável.`
+);
 
-${linhaDigitavel}`
-    );
+await enviarMensagem(numero, linhaDigitavel);
   }
 
   return;
