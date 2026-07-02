@@ -213,6 +213,45 @@ async function enviarMensagem(numero, texto) {
   );
 }
 
+async function enviarBotaoCopiarPix(numero, codigoPix) {
+  try {
+    const payload = {
+      number: numero,
+      title: "💳 Pagamento",
+      description: "Clique no botão abaixo para copiar o código PIX.",
+      footer: "ATOS TELECOM",
+      buttons: [
+        {
+          type: "copyCode",
+          displayText: "📋 Copiar PIX",
+          copyCode: codigoPix
+        }
+      ]
+    };
+
+    console.log("=== TESTE BOTÃO ===");
+    console.log(JSON.stringify(payload, null, 2));
+
+    const resposta = await axios.post(
+      `${EVOLUTION_URL}/message/sendButtons/${EVOLUTION_INSTANCE}`,
+      payload,
+      {
+        headers: {
+          apikey: EVOLUTION_API_KEY,
+          "Content-Type": "application/json"
+        }
+      }
+    );
+
+    console.log("Resposta Evolution:");
+    console.log(resposta.data);
+
+  } catch (erro) {
+    console.log("ERRO BOTÃO:");
+    console.log(erro.response?.data || erro.message);
+  }
+}
+
 async function trocarSenhaWifiRemoto(ip, banda, senha) {
   const response = await axios.post(
     `${NAVIGATOR_API_URL}/trocar-senha`,
@@ -552,9 +591,14 @@ if (pix?.type === "success") {
   const qrBase64 = pix.pix?.qrCode?.imagemQrcode;
 
   if (copiaCola) {
-    await enviarMensagem(numero, "💠 Pix Copia e Cola 👇🏻");
-    await enviarMensagem(numero, copiaCola);
-  }
+
+  await enviarBotaoCopiarPix(numero, copiaCola);
+
+  await enviarMensagem(numero, "💠 Caso o botão não apareça, segue o PIX abaixo:");
+
+  await enviarMensagem(numero, copiaCola);
+
+}
 
   if (qrBase64) {
     await enviarImagemBase64(
