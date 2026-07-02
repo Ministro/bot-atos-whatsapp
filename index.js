@@ -467,6 +467,30 @@ async function consultarPix(idAReceber) {
   return response.data;
 }
 
+async function enviarImagemBase64(numero, base64, nomeArquivo, legenda = "") {
+  try {
+    await axios.post(
+      `${EVOLUTION_URL}/message/sendMedia/${INSTANCE_NAME}`,
+      {
+        number: numero,
+        mediatype: "image",
+        mimetype: "image/png",
+        fileName: nomeArquivo,
+        media: base64,
+        caption: legenda
+      },
+      {
+        headers: {
+          apikey: EVOLUTION_API_KEY,
+          "Content-Type": "application/json"
+        }
+      }
+    );
+  } catch (erro) {
+    console.error("Erro ao enviar QR Code:", erro.response?.data || erro.message);
+  }
+}
+
 async function enviarBoletoOuPix(numero, sessao) {
   const idCliente = sessao?.cliente?.id;
 
@@ -521,9 +545,28 @@ console.log("===== FIM PIX =====");
 );
 
 await enviarMensagem(numero, linhaDigitavel);
+
+if (pix?.type === "success") {
+
+  const copiaCola = pix.pix?.qrCode?.qrcode;
+  const qrBase64 = pix.pix?.qrCode?.imagemQrcode;
+
+  if (copiaCola) {
+    await enviarMensagem(numero, "💠 Pix Copia e Cola 👇🏻");
+    await enviarMensagem(numero, copiaCola);
   }
 
-  return;
+  if (qrBase64) {
+    await enviarImagemBase64(
+      numero,
+      qrBase64,
+      "qrcode.png",
+      "📲 QR Code PIX"
+    );
+  }
+}
+
+return;
 }
 
 // ===================== NOVO: comando manual /boleto =====================
