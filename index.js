@@ -447,6 +447,26 @@ async function consultarDadosBoleto(idBoleto) {
   return response.data;
 }
 
+async function consultarPix(idAReceber) {
+  const auth = getAuthIXC();
+
+  const response = await axios.post(
+    `${IXC_URL}/get_pix`,
+    {
+      id_areceber: String(idAReceber)
+    },
+    {
+      headers: {
+        Authorization: `Basic ${auth}`,
+        "Content-Type": "application/json",
+        ixcsoft: "listar"
+      }
+    }
+  );
+
+  return response.data;
+}
+
 async function enviarBoletoOuPix(numero, sessao) {
   const idCliente = sessao?.cliente?.id;
 
@@ -481,6 +501,11 @@ async function enviarBoletoOuPix(numero, sessao) {
   const linhaDigitavel = String(boleto.linha_digitavel || "").replace(/\D/g, "");
 
   const pdfBoleto = await consultarDadosBoleto(boleto.id);
+  const pix = await consultarPix(boleto.id);
+
+console.log("===== PIX =====");
+console.log(JSON.stringify(pix, null, 2));
+console.log("===== FIM PIX =====");
 
   await enviarPdfBoleto(numero, pdfBoleto, `boleto-${boleto.id}.pdf`);
 
