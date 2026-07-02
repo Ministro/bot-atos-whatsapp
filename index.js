@@ -213,46 +213,6 @@ async function enviarMensagem(numero, texto) {
   );
 }
 
-async function enviarBotaoCopiarPix(numero, codigoPix) {
-  // Tenta usar o botão nativo "copy" (recurso adicionado na v2.3.7 da Evolution API,
-  // PR "feature: handle with interactive button message for pix").
-  // Se falhar (ex.: bug conhecido em outros tipos de botão na 2.3.7), retorna false
-  // e quem chamou cai no fallback de texto simples.
-  console.log("Tentando enviar botão de copiar PIX...");
-
-  try {
-    const resposta = await axios.post(
-      `${EVOLUTION_URL}/message/sendButtons/${EVOLUTION_INSTANCE}`,
-      {
-        number: numero,
-        title: "💠 Pagamento via PIX",
-        description: "Toque no botão abaixo para copiar o código Pix Copia e Cola.",
-        footer: "ATOS TELECOM",
-        buttons: [
-          {
-            type: "copy",
-            displayText: "📋 Copiar código Pix",
-            copyCode: codigoPix
-          }
-        ]
-      },
-      {
-        headers: {
-          apikey: EVOLUTION_API_KEY,
-          "Content-Type": "application/json"
-        },
-        timeout: 10000
-      }
-    );
-
-    console.log("Botão PIX enviado:", JSON.stringify(resposta.data));
-    return true;
-  } catch (erro) {
-    console.error("Falha ao enviar botão de copiar PIX, caindo para texto simples:", erro.response?.data || erro.message);
-    return false;
-  }
-}
-
 async function trocarSenhaWifiRemoto(ip, banda, senha) {
   const response = await axios.post(
     `${NAVIGATOR_API_URL}/trocar-senha`,
@@ -592,13 +552,8 @@ if (pix?.type === "success") {
   const qrBase64 = pix.pix?.qrCode?.imagemQrcode;
 
   if (copiaCola) {
-    const botaoEnviado = await enviarBotaoCopiarPix(numero, copiaCola);
-
-    if (!botaoEnviado) {
-      // Fallback: se o botão falhar, manda como texto (comportamento antigo).
-      await enviarMensagem(numero, "💠 Pix Copia e Cola 👇🏻");
-      await enviarMensagem(numero, copiaCola);
-    }
+    await enviarMensagem(numero, "💠 Pix Copia e Cola 👇🏻");
+    await enviarMensagem(numero, copiaCola);
   }
 
   if (qrBase64) {
@@ -1074,6 +1029,8 @@ Use: /boleto 12345678900`);
       console.log("Fora do horário do plantão. Webhook WhatsApp ignorado.");
       return res.sendStatus(200);
     }
+
+    const message2 = message; // mantém compatibilidade com o restante do código abaixo
 
     const audio = ehAudio(message, data);
 
@@ -1839,7 +1796,7 @@ return res.sendStatus(200);
     if (resultado.sucesso) {
       await enviarMensagem(
         numero,
-`✅ Roteaddor reiniciado com sucesso!
+`✅ Roteador reiniciado com sucesso!
 
 Esta reiniciando.
 
