@@ -1796,7 +1796,7 @@ return res.sendStatus(200);
     if (resultado.sucesso) {
       await enviarMensagem(
         numero,
-`✅ Roteaddor reiniciado com sucesso!
+`✅ Roteador reiniciado com sucesso!
 
 Esta reiniciando.
 
