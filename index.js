@@ -470,7 +470,7 @@ async function consultarPix(idAReceber) {
 async function enviarImagemBase64(numero, base64, nomeArquivo, legenda = "") {
   try {
     await axios.post(
-      `${EVOLUTION_URL}/message/sendMedia/${INSTANCE_NAME}`,
+      `${EVOLUTION_URL}/message/sendMedia/${EVOLUTION_INSTANCE}`,
       {
         number: numero,
         mediatype: "image",
@@ -567,6 +567,8 @@ if (pix?.type === "success") {
 }
 
 return;
+}
+
 }
 
 // ===================== NOVO: comando manual /boleto =====================
