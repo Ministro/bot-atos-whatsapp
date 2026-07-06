@@ -1016,6 +1016,35 @@ Use: /boleto 12345678900`);
       return res.sendStatus(200);
     }
 
+    // ===================================================================
+    // NOVO: comando manual do PRÓPRIO CLIENTE. Funciona a QUALQUER hora,
+    // igual ao comando do admin acima, sem depender do horário de plantão.
+    // O cliente pode digitar na conversa:
+    //   /boleto 12345678900  -> usa o CPF informado no próprio comando
+    //   /boleto              -> usa o último CPF que ele mesmo já enviou
+    // ===================================================================
+    {
+      const comandoClienteTexto = String(texto || "").trim();
+      const matchComandoCliente = comandoClienteTexto.match(/^\/boleto(?:\s+([\d.\-]+))?$/i);
+
+      if (matchComandoCliente) {
+        const cpfDoArgumentoCliente = matchComandoCliente[1] ? limparCpf(matchComandoCliente[1]) : null;
+        const cpfValidoCliente = cpfDoArgumentoCliente && cpfDoArgumentoCliente.length === 11
+          ? cpfDoArgumentoCliente
+          : cpfsCapturados.get(numero);
+
+        if (!cpfValidoCliente) {
+          await enviarMensagem(numero, `⚠️ Não localizei nenhum CPF salvo para este número ainda.
+
+Envie: /boleto 12345678900`);
+          return res.sendStatus(200);
+        }
+
+        await processarComandoBoleto(numero, cpfValidoCliente);
+        return res.sendStatus(200);
+      }
+    }
+
     // Captura passiva: se o cliente digitar um CPF em qualquer momento,
     // guardamos para o comando /boleto poder usar depois.
     if (pareceCpf(texto)) {
