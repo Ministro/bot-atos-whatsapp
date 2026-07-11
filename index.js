@@ -34,6 +34,21 @@ const timersEncerramento = new Map();
 // Guarda o último CPF que cada número enviou no chat, para o comando manual /boleto
 const cpfsCapturados = new Map();
 
+// ===========================================================================
+// NOVO: controle de "atendente assumiu o chat manualmente"
+// ===========================================================================
+// Guarda os IDs das mensagens que o PRÓPRIO BOT enviou. Como o bot manda
+// mensagens usando o mesmo número/instância que você usa no celular, toda
+// mensagem enviada pelo bot também chega de volta no webhook como
+// "fromMe: true". Sem isso, o bot acabaria se autopausando toda vez que
+// respondesse alguma coisa.
+const idsMensagensBot = new Set();
+
+// Guarda, por número de cliente, o timer dos 10 minutos de pausa. Enquanto o
+// número estiver neste Map, o bot fica em silêncio nesse chat específico —
+// os outros chats continuam funcionando normalmente.
+const pausasAtendimentoHumano = new Map();
+
 const palavrasDespedida = [
   "obrigado", "obrigada", "obg", "valeu", "vlw", "ok",
   "tá bom", "ta bom", "beleza", "blz", "certo",
@@ -135,6 +150,55 @@ Tenha um excelente dia! 💙`);
   timersEncerramento.set(numero, timer);
 }
 
+// ===========================================================================
+// NOVO: funções de pausa por atendimento humano
+// ===========================================================================
+
+// Marca (ou renova) a pausa de 10 minutos para um número específico.
+// Chamada tanto quando VOCÊ manda uma mensagem manual pro cliente, quanto
+// quando o CLIENTE manda mensagem enquanto o chat já está pausado — em
+// ambos os casos o "relógio" de 10 minutos de silêncio recomeça do zero.
+function pausarAtendimentoHumano(numero) {
+  // Cancela qualquer timer de encerramento automático em andamento, já que
+  // o atendente está cuidando da conversa manualmente agora.
+  cancelarEncerramento(numero);
+
+  // Zera o fluxo automático em que o cliente estava. Assim, quando o bot
+  // voltar a responder (depois dos 10 minutos), ele começa do zero em vez
+  // de tentar continuar um fluxo no meio, que pode já ter sido resolvido
+  // por você manualmente.
+  sessoes.delete(numero);
+
+  if (pausasAtendimentoHumano.has(numero)) {
+    clearTimeout(pausasAtendimentoHumano.get(numero));
+  }
+
+  const timer = setTimeout(() => {
+    pausasAtendimentoHumano.delete(numero);
+    console.log(`Bot retomado automaticamente para ${numero} após 10 minutos sem mensagens.`);
+  }, 10 * 60 * 1000);
+
+  pausasAtendimentoHumano.set(numero, timer);
+}
+
+function estaPausadoPorHumano(numero) {
+  return pausasAtendimentoHumano.has(numero);
+}
+
+// Registra o ID de uma mensagem que o BOT acabou de enviar, para que quando
+// ela "ecoar" de volta no webhook como fromMe:true, o sistema saiba que não
+// foi você quem digitou aquilo manualmente.
+function registrarMensagemDoBot(dadosResposta) {
+  const id = dadosResposta?.key?.id;
+
+  if (!id) return;
+
+  idsMensagensBot.add(id);
+
+  // Limpeza de segurança, caso o eco do webhook nunca chegue por algum motivo.
+  setTimeout(() => idsMensagensBot.delete(id), 5 * 60 * 1000);
+}
+
 async function responderDespedida(numero) {
   cancelarEncerramento(numero);
 
@@ -201,7 +265,7 @@ function listarAcesso(cliente, pppoe, index) {
 }
 
 async function enviarMensagem(numero, texto) {
-  await axios.post(
+  const resposta = await axios.post(
     `${EVOLUTION_URL}/message/sendText/${EVOLUTION_INSTANCE}`,
     { number: numero, text: texto },
     {
@@ -211,6 +275,8 @@ async function enviarMensagem(numero, texto) {
       }
     }
   );
+
+  registrarMensagemDoBot(resposta?.data);
 }
 
 async function trocarSenhaWifiRemoto(ip, banda, senha) {
@@ -288,7 +354,7 @@ async function otimizarCanalRemoto(ip) {
 async function enviarPdfBoleto(numero, base64Pdf, nomeArquivo = "boleto.pdf") {
   const base64Limpo = String(base64Pdf || "").replace(/^data:application\/pdf;base64,/, "");
 
-  await axios.post(
+  const resposta = await axios.post(
     `${EVOLUTION_URL}/message/sendMedia/${EVOLUTION_INSTANCE}`,
     {
       number: numero,
@@ -305,6 +371,8 @@ async function enviarPdfBoleto(numero, base64Pdf, nomeArquivo = "boleto.pdf") {
       }
     }
   );
+
+  registrarMensagemDoBot(resposta?.data);
 }
 
 async function consultarCpf(cpf) {
@@ -469,7 +537,7 @@ async function consultarPix(idAReceber) {
 
 async function enviarImagemBase64(numero, base64, nomeArquivo, legenda = "") {
   try {
-    await axios.post(
+    const resposta = await axios.post(
       `${EVOLUTION_URL}/message/sendMedia/${EVOLUTION_INSTANCE}`,
       {
         number: numero,
@@ -486,6 +554,8 @@ async function enviarImagemBase64(numero, base64, nomeArquivo, legenda = "") {
         }
       }
     );
+
+    registrarMensagemDoBot(resposta?.data);
   } catch (erro) {
     console.error("Erro ao enviar QR Code:", erro.response?.data || erro.message);
   }
@@ -987,13 +1057,27 @@ app.post("/webhook", async (req, res) => {
       "";
 
     // ===================================================================
-    // NOVO: comando manual do administrador. Funciona a QUALQUER hora,
-    // independente do plantão, porque é tratado antes do bloqueio abaixo.
-    // Digite na própria conversa do cliente:
-    //   /boleto            -> usa o último CPF que o cliente mandou
-    //   /boleto 12345678900 -> usa o CPF informado no próprio comando
+    // fromMe: mensagens enviadas pelo número/instância do WhatsApp — tanto
+    // as que o PRÓPRIO BOT manda (eco do webhook) quanto as que VOCÊ manda
+    // manualmente pelo celular/WhatsApp Web.
     // ===================================================================
     if (key.fromMe) {
+      const idMensagem = key.id;
+
+      // Se esse ID é de uma mensagem que o bot mesmo enviou, é só o eco do
+      // webhook — não significa que você assumiu a conversa. Ignora.
+      if (idMensagem && idsMensagensBot.has(idMensagem)) {
+        idsMensagensBot.delete(idMensagem);
+        return res.sendStatus(200);
+      }
+
+      // =================================================================
+      // Comando manual do administrador. Funciona a QUALQUER hora,
+      // independente do plantão, porque é tratado antes do bloqueio
+      // abaixo. Digite na própria conversa do cliente:
+      //   /boleto            -> usa o último CPF que o cliente mandou
+      //   /boleto 12345678900 -> usa o CPF informado no próprio comando
+      // =================================================================
       const comandoTexto = String(texto || "").trim();
       const matchComando = comandoTexto.match(/^\/boleto(?:\s+([\d.\-]+))?$/i);
 
@@ -1011,14 +1095,25 @@ Use: /boleto 12345678900`);
         }
 
         await processarComandoBoleto(numero, cpfValido);
+        return res.sendStatus(200);
       }
+
+      // =================================================================
+      // NOVO: qualquer outra mensagem "fromMe" que não seja eco do bot nem
+      // o comando /boleto é você digitando manualmente pro cliente. Isso
+      // significa que você assumiu o atendimento — o bot para de
+      // responder nesse número até 10 minutos sem mensagens de nenhum dos
+      // dois lados. Os outros chats continuam normais.
+      // =================================================================
+      pausarAtendimentoHumano(numero);
+      console.log(`Atendente assumiu manualmente a conversa com ${numero}. Bot pausado por 10 minutos de inatividade.`);
 
       return res.sendStatus(200);
     }
 
     // ===================================================================
-    // NOVO: comando manual do PRÓPRIO CLIENTE. Funciona a QUALQUER hora,
-    // igual ao comando do admin acima, sem depender do horário de plantão.
+    // Comando manual do PRÓPRIO CLIENTE. Funciona a QUALQUER hora, igual
+    // ao comando do admin acima, sem depender do horário de plantão.
     // O cliente pode digitar na conversa:
     //   /boleto 12345678900  -> usa o CPF informado no próprio comando
     //   /boleto              -> usa o último CPF que ele mesmo já enviou
@@ -1049,6 +1144,18 @@ Envie: /boleto 12345678900`);
     // guardamos para o comando /boleto poder usar depois.
     if (pareceCpf(texto)) {
       cpfsCapturados.set(numero, limparCpf(texto));
+    }
+
+    // ===================================================================
+    // NOVO: se você assumiu esse chat manualmente, o bot fica em silêncio
+    // aqui. A cada mensagem do cliente enquanto pausado, apenas renovamos
+    // os 10 minutos (sem responder nada), até que se passem 10 minutos
+    // sem mensagens de nenhum dos dois lados — aí o bot volta a responder
+    // normalmente, do zero.
+    // ===================================================================
+    if (estaPausadoPorHumano(numero)) {
+      pausarAtendimentoHumano(numero);
+      return res.sendStatus(200);
     }
 
     // ===================================================================
