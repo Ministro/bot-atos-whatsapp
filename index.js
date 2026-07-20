@@ -29,7 +29,7 @@ const NAVIGATOR_API_URL = process.env.NAVIGATOR_API_URL || "https://quintuple-ba
 const NAVIGATOR_API_TOKEN = process.env.NAVIGATOR_API_TOKEN || "193746285";
 
 const sessoes = new Map();
-const timersEncerramento = new Map();
+const timersEncerramento = new Map(); 
 
 // Guarda o último CPF que cada número enviou no chat, para o comando manual /boleto
 const cpfsCapturados = new Map();
