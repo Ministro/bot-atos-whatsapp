@@ -70,6 +70,14 @@ function limparCpf(texto) {
   return String(texto || "").replace(/\D/g, "");
 }
 
+function extrairCpfComHash(texto) {
+  const match = String(texto || "").match(/#(\d{11})/);
+
+  if (!match) return null;
+
+  return match[1];
+}
+
 function pareceCpf(texto) {
   return limparCpf(texto).length === 11;
 }
@@ -1071,6 +1079,22 @@ app.post("/webhook", async (req, res) => {
         return res.sendStatus(200);
       }
 
+      // =================================================================
+// NOVO: boleto pelo CPF com # enviado pelo atendente
+// Exemplo:
+// CPF
+// #02924314224
+// =================================================================
+
+const cpfComHash = extrairCpfComHash(texto);
+
+if (cpfComHash) {
+  console.log("CPF encontrado pelo comando com #:", cpfComHash);
+
+  await processarComandoBoleto(numero, cpfComHash);
+
+  return res.sendStatus(200);
+}
       // =================================================================
       // Comando manual do administrador. Funciona a QUALQUER hora,
       // independente do plantão, porque é tratado antes do bloqueio
