@@ -580,7 +580,7 @@ async function enviarBoletoOuPix(numero, sessao) {
     return;
   }
 
-  await enviarMensagem(numero, "🔎 Consultando faturas em aberto...");
+  await enviarMensagem(numero, "🔎 Gerando fatura...");
 
   const dados = await consultarBoletosPorCliente(idCliente);
 
