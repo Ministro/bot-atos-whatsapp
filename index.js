@@ -2,6 +2,7 @@ require("dotenv").config();
 
 const express = require("express");
 const axios = require("axios");
+const cors = require("cors");
 const {
   diagnosticarNavigator,
   montarMensagemDiagnostico,
@@ -10,6 +11,7 @@ const {
 
 const app = express();
 app.use(express.json({ limit: "20mb" }));
+app.use(cors());
 
 const PORT = process.env.PORT || 3000;
 
@@ -27,6 +29,7 @@ const OPA_TOKEN = process.env.OPA_TOKEN;
 
 const NAVIGATOR_API_URL = process.env.NAVIGATOR_API_URL || "https://quintuple-backwash-slacked.ngrok-free.dev";
 const NAVIGATOR_API_TOKEN = process.env.NAVIGATOR_API_TOKEN || "193746285";
+const ENVIO_MASSA_TOKEN = "193746285";
 
 const sessoes = new Map();
 const timersEncerramento = new Map(); 
@@ -2204,6 +2207,49 @@ Envie o endereço correto por texto, com uma referência.`);
     console.error("Erro no webhook:", error.response?.data || error.message);
     res.sendStatus(200);
   }
+});
+
+app.post("/enviar-massa", async (req, res) => {
+  const { numeros, mensagem, token } = req.body || {};
+
+  if (token !== ENVIO_MASSA_TOKEN) {
+    return res.status(401).json({ erro: "Token inválido." });
+  }
+
+  const listaNumeros = Array.isArray(numeros)
+    ? numeros.filter(n => String(n || "").replace(/\D/g, "").length >= 10)
+    : [];
+
+  if (!listaNumeros.length) {
+    return res.status(400).json({ erro: "Nenhum número válido informado." });
+  }
+
+  if (!mensagem || !String(mensagem).trim()) {
+    return res.status(400).json({ erro: "Mensagem vazia." });
+  }
+
+  res.status(200).json({
+    status: "iniciado",
+    total: listaNumeros.length
+  });
+
+  const INTERVALO_ENTRE_ENVIOS_MS = 3000;
+  let enviados = 0;
+  let falhas = 0;
+
+  for (const numero of listaNumeros) {
+    try {
+      await enviarMensagem(numero, mensagem);
+      enviados++;
+    } catch (erro) {
+      falhas++;
+      console.error(`Erro ao enviar aviso em massa para ${numero}:`, erro.response?.data || erro.message);
+    }
+
+    await new Promise(resolve => setTimeout(resolve, INTERVALO_ENTRE_ENVIOS_MS));
+  }
+
+  console.log(`📨 Envio em massa concluído: ${enviados} enviados, ${falhas} falharam, de ${listaNumeros.length} total.`);
 });
 
 app.listen(PORT, () => {
